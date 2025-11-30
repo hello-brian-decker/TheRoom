@@ -16,6 +16,8 @@ import { rigidBodyDocumentation } from '../docs/rigid-body.js';
 import { clothDocumentation } from '../docs/cloth.js';
 import { fluidDocumentation } from '../docs/fluid.js';
 import { waterfallDocumentation } from '../docs/waterfall.js';
+import { circuitsDocumentation } from '../docs/circuits.js';
+import { arduinoDocumentation } from '../docs/arduino.js';
 
 export class HomeScene {
     constructor(canvas) {
@@ -38,7 +40,9 @@ export class HomeScene {
             { title: 'Rigid Body Dynamics', doc: rigidBodyDocumentation, description: 'Rotational motion, torque, and angular momentum' },
             { title: 'Cloth Simulation', doc: clothDocumentation, description: 'Mass-spring systems for fabric simulation' },
             { title: 'Fluid Dynamics', doc: fluidDocumentation, description: 'SPH particle-based fluid simulation' },
-            { title: 'Waterfall Physics', doc: waterfallDocumentation, description: 'Bouncing ball physics and energy conservation' }
+            { title: 'Waterfall Physics', doc: waterfallDocumentation, description: 'Bouncing ball physics and energy conservation' },
+            { title: 'Circuit Theory', doc: circuitsDocumentation, description: 'Ohm\'s law, Kirchhoff\'s laws, circuit analysis, and electrical components' },
+            { title: 'Arduino Programming', doc: arduinoDocumentation, description: 'Arduino hardware, programming functions, GPIO, and electronics projects' }
         ];
     }
 
@@ -191,7 +195,10 @@ export class HomeScene {
             { title: 'Orbital Mechanics', desc: 'Gravitational orbits, Kepler\'s laws, escape velocity', route: '/orbital', color: '#ccaa00' },
             { title: 'Solar System', desc: 'Interactive solar system with clickable planets and physics information', route: '/solar-system', color: '#ff6600' },
             { title: 'Cloth Simulation', desc: 'Mass-spring cloth system with wind forces', route: '/cloth', color: '#cc00aa' },
-            { title: 'Fluid Simulation', desc: 'SPH particle-based fluid dynamics', route: '/fluid', color: '#0066ff' }
+            { title: 'Fluid Simulation', desc: 'SPH particle-based fluid dynamics', route: '/fluid', color: '#0066ff' },
+            { title: 'Virtual Chip Designer', desc: 'Build and simulate circuits with analog and digital components', route: '/virtual-chip', color: '#9b59b6' },
+            { title: 'Arduino Simulator', desc: 'Learn Arduino programming and simulate hardware interactions', route: '/arduino', color: '#3498db' },
+            { title: 'Board Electrical Systems', desc: 'Explore how electricity flows through Raspberry Pi, Arduino, and ESP32 boards', route: '/board-electrical', color: '#e74c3c' }
         ];
 
         experiments.forEach(exp => {

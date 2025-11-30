@@ -16,6 +16,9 @@ import { OrbitalScene } from './scenes/OrbitalScene.js';
 import { ClothScene } from './scenes/ClothScene.js';
 import { FluidScene } from './scenes/FluidScene.js';
 import { SolarSystemScene } from './scenes/SolarSystemScene.js';
+import { VirtualChipScene } from './scenes/VirtualChipScene.js';
+import { ArduinoScene } from './scenes/ArduinoScene.js';
+import { BoardElectricalScene } from './scenes/BoardElectricalScene.js';
 
 class App {
     constructor() {
@@ -133,6 +136,27 @@ class App {
             await scene.init();
             return scene;
         });
+
+        // Virtual Chip route
+        this.router.register('/virtual-chip', async () => {
+            const scene = new VirtualChipScene(this.canvas);
+            await scene.init();
+            return scene;
+        });
+
+        // Arduino route
+        this.router.register('/arduino', async () => {
+            const scene = new ArduinoScene(this.canvas);
+            await scene.init();
+            return scene;
+        });
+
+        // Board Electrical route
+        this.router.register('/board-electrical', async () => {
+            const scene = new BoardElectricalScene(this.canvas);
+            await scene.init();
+            return scene;
+        });
     }
 
     /**
@@ -150,7 +174,10 @@ class App {
             '/orbital': 'Orbital Mechanics',
             '/cloth': 'Cloth Simulation',
             '/fluid': 'Fluid Simulation',
-            '/solar-system': 'Solar System'
+            '/solar-system': 'Solar System',
+            '/virtual-chip': 'Virtual Chip Designer',
+            '/arduino': 'Arduino Simulator',
+            '/board-electrical': 'Board Electrical Systems'
         };
         return titles[route] || 'Physics Lab';
     }

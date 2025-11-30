@@ -50,7 +50,7 @@ export class PhysicsDocumentation {
         `;
         
         const title = document.createElement('div');
-        title.textContent = 'Mathematical Documentation';
+        title.textContent = content.title || 'Mathematical Documentation';
         header.appendChild(title);
 
         const closeBtn = document.createElement('button');
@@ -200,6 +200,18 @@ export class PhysicsDocumentation {
                 html += `<li style="margin-bottom: 8px; font-size: 13px;">${ref}</li>`;
             });
             html += `</ul></section>`;
+        }
+
+        // Support sections array format (for circuits, arduino, etc.)
+        if (content.sections && Array.isArray(content.sections)) {
+            content.sections.forEach(section => {
+                html += `<section style="margin-bottom: 30px;">
+                    <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px; margin-bottom: 15px;">${section.title}</h2>
+                    <div style="text-align: justify; line-height: 1.8;">
+                        ${section.content}
+                    </div>
+                </section>`;
+            });
         }
 
         return html;
