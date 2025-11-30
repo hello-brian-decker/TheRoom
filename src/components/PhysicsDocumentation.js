@@ -26,7 +26,7 @@ export class PhysicsDocumentation {
             background: rgba(255, 255, 255, 0.98);
             border-left: 2px solid #0066cc;
             box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
-            z-index: 999;
+            z-index: 2000;
             transition: right 0.3s ease;
             overflow-y: auto;
             font-family: 'Georgia', 'Times New Roman', serif;

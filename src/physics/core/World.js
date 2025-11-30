@@ -12,6 +12,7 @@
 
 import { Vector3 } from '../math/Vector3.js';
 import { Body } from './Body.js';
+import { EulerIntegrator } from '../integrators/EulerIntegrator.js';
 
 export class World {
     constructor() {
@@ -148,11 +149,26 @@ export class World {
 
     /**
      * Integrate motion for all bodies
-     * This is a placeholder - actual integration is done by engines
+     * Updates positions and velocities based on forces and acceleration
      */
     integrate(deltaTime) {
-        // Integration is handled by specific physics engines
-        // This is a placeholder for the base world
+        for (const body of this.bodies) {
+            if (body.isStatic || body.isKinematic) continue;
+
+            // Update acceleration from accumulated forces
+            body.updateAcceleration();
+
+            // Integrate motion using Euler method
+            EulerIntegrator.integrate(
+                body.position,
+                body.velocity,
+                body.acceleration,
+                deltaTime
+            );
+
+            // Clear forces for next frame
+            body.clearForces();
+        }
     }
 
     /**

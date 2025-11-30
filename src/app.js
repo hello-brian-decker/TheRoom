@@ -15,6 +15,7 @@ import { SpringMassScene } from './scenes/SpringMassScene.js';
 import { OrbitalScene } from './scenes/OrbitalScene.js';
 import { ClothScene } from './scenes/ClothScene.js';
 import { FluidScene } from './scenes/FluidScene.js';
+import { SolarSystemScene } from './scenes/SolarSystemScene.js';
 
 class App {
     constructor() {
@@ -125,6 +126,13 @@ class App {
             await scene.init();
             return scene;
         });
+
+        // Solar System route
+        this.router.register('/solar-system', async () => {
+            const scene = new SolarSystemScene(this.canvas);
+            await scene.init();
+            return scene;
+        });
     }
 
     /**
@@ -141,7 +149,8 @@ class App {
             '/spring-mass': 'Spring-Mass Systems',
             '/orbital': 'Orbital Mechanics',
             '/cloth': 'Cloth Simulation',
-            '/fluid': 'Fluid Simulation'
+            '/fluid': 'Fluid Simulation',
+            '/solar-system': 'Solar System'
         };
         return titles[route] || 'Physics Lab';
     }
