@@ -4,11 +4,16 @@
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 [![Three.js](https://img.shields.io/badge/Three.js-0.160+-green.svg)](https://threejs.org/)
 
-A comprehensive 3D physics simulation and educational platform featuring interactive demonstrations, a custom physics engine, and educational tools for learning physics, electronics, and programming concepts.
+A comprehensive portfolio project demonstrating advanced software engineering skills through a custom-built 3D physics simulation engine and interactive educational platform. Features include real-time physics simulations, custom collision detection algorithms, multiple numerical integration methods, and educational tools for learning physics, electronics, and programming concepts.
 
 ## Overview
 
-The Room is an interactive web-based physics laboratory that combines real-time 3D simulations with educational content. It features a custom-built physics engine, multiple integration methods, advanced collision detection, and a variety of educational tools including an Arduino simulator and circuit designer.
+The Room is a showcase project featuring a **custom-built physics engine** implemented from scratch, demonstrating deep understanding of physics simulation, advanced algorithms, and software architecture. This portfolio piece combines real-time 3D simulations with educational content, highlighting technical achievements in:
+
+- **Custom Physics Engine**: Built from scratch with mathematical foundations
+- **Advanced Algorithms**: Collision detection, spatial partitioning, numerical integration
+- **3D Graphics**: Three.js integration and optimization
+- **Full-Stack Architecture**: Modular, scalable system design
 
 ## Features
 
@@ -32,14 +37,19 @@ The Room is an interactive web-based physics laboratory that combines real-time 
 - **Virtual Chip Designer**: Integrated circuit design tool
 - **Physics Documentation Browser**: Comprehensive educational content with search functionality
 
-### Physics Engine
+### Custom Physics Engine (Built from Scratch)
 
-- **Custom 3D Physics Engine**: Built from scratch with mathematical foundations
-- **Multiple Integration Methods**: Euler, RK4 (Runge-Kutta 4th order), and Verlet integration
-- **Advanced Collision Detection**: Broad phase and narrow phase collision detection
-- **Spatial Partitioning**: Spatial Grid, BVH (Bounding Volume Hierarchy), and Octree support
-- **Collision Shapes**: Box, Sphere, and Mesh collision shapes
-- **Impulse-Based Resolution**: Realistic collision response with friction and restitution
+This project demonstrates the ability to build complex systems from the ground up:
+
+- **Custom 3D Physics Engine**: Fully implemented from scratch with mathematical foundations
+- **Multiple Integration Methods**: Euler, RK4 (Runge-Kutta 4th order), and Verlet integration - each implemented with proper mathematical understanding
+- **Advanced Collision Detection**: Two-phase system (broad phase and narrow phase) with multiple algorithms
+  - Broad phase: Spatial Grid, BVH (Bounding Volume Hierarchy), and Octree implementations
+  - Narrow phase: SAT (Separating Axis Theorem) for precise collision detection
+- **Spatial Partitioning**: Efficient algorithms reducing complexity from O(n²) to O(n + k)
+- **Collision Shapes**: Multiple shape types (Box, Sphere, Mesh) with proper intersection tests
+- **Impulse-Based Resolution**: Realistic collision response with friction and restitution modeling
+- **Performance Optimization**: Handles 100+ physics bodies smoothly at 60 FPS
 
 ## Technology Stack
 
@@ -101,7 +111,7 @@ npm run dist
 TheRoom/
 ├── LICENSE                 # MIT License
 ├── README.md              # This file
-├── CONTRIBUTING.md        # Contribution guidelines
+├── PORTFOLIO.md           # Portfolio showcase and technical achievements
 ├── CHANGELOG.md           # Version history
 ├── package.json           # Dependencies and scripts
 ├── vite.config.js         # Vite configuration
@@ -179,12 +189,12 @@ TheRoom/
 
 ## Documentation
 
+- **[Portfolio Showcase](PORTFOLIO.md)**: Technical achievements and skills demonstrated
 - **[Architecture Documentation](docs/ARCHITECTURE.md)**: System architecture and design
 - **[API Documentation](docs/API.md)**: Physics engine API reference
 - **[Development Guide](docs/DEVELOPMENT.md)**: Development setup and workflow
 - **[Deployment Guide](docs/DEPLOYMENT.md)**: Deployment instructions
 - **[Project Structure](docs/STRUCTURE.md)**: Detailed project organization
-- **[Contributing Guidelines](CONTRIBUTING.md)**: How to contribute
 - **[Changelog](CHANGELOG.md)**: Version history
 
 ## Usage Examples
@@ -242,9 +252,17 @@ The application is fully web-compatible and can be deployed to any static hostin
 - Vercel
 - Cloudflare Pages
 
-## Contributing
+## Technical Highlights
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+This portfolio project demonstrates:
+
+- **System Design**: Architecture of complex, multi-component systems
+- **Algorithm Implementation**: Advanced algorithms (collision detection, spatial partitioning, numerical integration)
+- **Performance Optimization**: Efficient algorithms and data structures
+- **Mathematics & Physics**: Deep understanding of 3D mathematics, Newtonian mechanics, and numerical methods
+- **Code Quality**: Clean, maintainable, well-documented codebase with comprehensive JSDoc
+
+See [PORTFOLIO.md](PORTFOLIO.md) for detailed technical achievements and skills demonstrated.
 
 ## License
 
@@ -254,13 +272,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Three.js community for excellent 3D graphics library
 - Physics education community for inspiration
-- Open source contributors
-
-## Contact & Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/TheRoom/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/TheRoom/discussions)
 
 ---
 
-Made with ❤️ for physics education and simulation
+A portfolio project demonstrating advanced software engineering and physics simulation capabilities

@@ -6,7 +6,7 @@
 TheRoom/
 ├── LICENSE                 # MIT License
 ├── README.md              # Main project documentation
-├── CONTRIBUTING.md        # Contribution guidelines
+├── PORTFOLIO.md           # Portfolio showcase and technical achievements
 ├── CHANGELOG.md           # Version history
 ├── package.json           # Dependencies and scripts
 ├── vite.config.js         # Vite build configuration
@@ -312,7 +312,7 @@ The `dist/` directory contains:
 ## Documentation Files
 
 - **README.md**: Project overview and quick start
-- **CONTRIBUTING.md**: Contribution guidelines
+- **PORTFOLIO.md**: Portfolio showcase and technical achievements
 - **CHANGELOG.md**: Version history
 - **docs/ARCHITECTURE.md**: System architecture
 - **docs/API.md**: API reference

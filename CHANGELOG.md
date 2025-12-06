@@ -74,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture documentation
 - API documentation
 - Development guide
-- Contributing guidelines
+- Portfolio showcase documentation
 - Code documentation (JSDoc)
 
 [1.0.0]: https://github.com/yourusername/TheRoom/releases/tag/v1.0.0
