@@ -1,7 +1,7 @@
 {
   "name": "the-room",
   "version": "1.0.0",
-  "description": "3D Matrix Room Game",
+  "description": "Interactive 3D physics simulation and educational platform with custom physics engine, multiple integration methods, collision detection, and educational tools including Arduino simulator",
   "main": "src/main.js",
   "type": "module",
   "scripts": {
@@ -13,13 +13,32 @@
     "dist": "electron-builder"
   },
   "keywords": [
+    "physics",
+    "simulation",
     "3d",
-    "game",
-    "matrix",
-    "three.js"
+    "three.js",
+    "education",
+    "physics-engine",
+    "collision-detection",
+    "arduino",
+    "electronics",
+    "interactive",
+    "webgl",
+    "rigid-body",
+    "fluid-simulation",
+    "orbital-mechanics",
+    "educational-tool"
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/TheRoom.git"
+  },
+  "homepage": "https://github.com/yourusername/TheRoom#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/TheRoom/issues"
+  },
   "dependencies": {
     "three": "^0.160.0"
   },

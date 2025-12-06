@@ -17,22 +17,32 @@
  * - Better energy conservation
  * - Doesn't explicitly track velocity (can be computed if needed)
  * - Time-reversible (symplectic)
+ * 
+ * @example
+ * // Standard Verlet (requires previous position)
+ * VerletIntegrator.integrate(position, previousPosition, acceleration, deltaTime);
+ * 
+ * // Velocity Verlet (tracks velocity)
+ * VerletIntegrator.integrateVelocityVerlet(position, velocity, acceleration, newAcceleration, deltaTime);
  */
-
 import { Vector3 } from '../math/Vector3.js';
 
 export class VerletIntegrator {
     /**
      * Standard Verlet integration
-     * Requires storing previous position
+     * 
+     * Requires storing previous position. More stable than Euler and
+     * better for long-term simulations.
      * 
      * Mathematical:
      * p(t+dt) = 2*p(t) - p(t-dt) + a(t)*dt²
      * 
-     * @param {Vector3} position - Current position
-     * @param {Vector3} previousPosition - Position at previous time step
+     * @param {Vector3} position - Current position (modified in-place)
+     * @param {Vector3} previousPosition - Position at previous time step (modified in-place)
      * @param {Vector3} acceleration - Current acceleration
-     * @param {number} deltaTime - Time step
+     * @param {number} deltaTime - Time step in seconds
+     * @example
+     * VerletIntegrator.integrate(position, previousPosition, acceleration, 0.016);
      */
     static integrate(position, previousPosition, acceleration, deltaTime) {
         const dt2 = deltaTime * deltaTime;
@@ -49,18 +59,23 @@ export class VerletIntegrator {
 
     /**
      * Velocity Verlet (explicitly tracks velocity)
-     * More commonly used variant that tracks velocity
+     * 
+     * More commonly used variant that explicitly tracks velocity.
+     * Requires knowing acceleration at the next time step.
      * 
      * Mathematical:
      * v(t+dt/2) = v(t) + (1/2)*a(t)*dt
      * p(t+dt) = p(t) + v(t+dt/2)*dt
      * v(t+dt) = v(t+dt/2) + (1/2)*a(t+dt)*dt
      * 
-     * @param {Vector3} position - Current position
-     * @param {Vector3} velocity - Current velocity
+     * @param {Vector3} position - Current position (modified in-place)
+     * @param {Vector3} velocity - Current velocity (modified in-place)
      * @param {Vector3} acceleration - Current acceleration
-     * @param {Vector3} newAcceleration - Acceleration at next time step
-     * @param {number} deltaTime - Time step
+     * @param {Vector3} newAcceleration - Acceleration at next time step (must be computed)
+     * @param {number} deltaTime - Time step in seconds
+     * @example
+     * const newAccel = computeAcceleration(position, velocity);
+     * VerletIntegrator.integrateVelocityVerlet(position, velocity, acceleration, newAccel, deltaTime);
      */
     static integrateVelocityVerlet(position, velocity, acceleration, newAcceleration, deltaTime) {
         // Half-step velocity update
@@ -81,7 +96,19 @@ export class VerletIntegrator {
 
     /**
      * Compute velocity from Verlet positions
+     * 
+     * Calculates velocity from current and previous positions.
+     * Useful when using standard Verlet integration which doesn't track velocity.
+     * 
+     * Mathematical:
      * v(t) = (p(t+dt) - p(t-dt)) / (2*dt)
+     * 
+     * @param {Vector3} currentPosition - Current position
+     * @param {Vector3} previousPosition - Previous position
+     * @param {number} deltaTime - Time step in seconds
+     * @returns {Vector3} Computed velocity vector
+     * @example
+     * const velocity = VerletIntegrator.computeVelocity(position, previousPosition, deltaTime);
      */
     static computeVelocity(currentPosition, previousPosition, deltaTime) {
         const velocity = new Vector3();

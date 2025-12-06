@@ -1,10 +1,14 @@
 /**
- * Router - Client-side routing system
+ * Router - Client-side Routing System
  * 
- * Handles navigation between different scenes/effects.
- * Uses hash-based routing for compatibility.
+ * Handles navigation between different scenes/effects using hash-based routing.
+ * Manages scene lifecycle (creation, cleanup, disposal).
+ * 
+ * @example
+ * const router = new Router();
+ * router.register('/', () => new HomeScene(canvas));
+ * router.init();
  */
-
 export class Router {
     constructor() {
         this.routes = new Map();

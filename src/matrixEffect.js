@@ -1,5 +1,19 @@
+/**
+ * Matrix Effect - Green Code Rain Visual Effect
+ * 
+ * Creates animated falling characters (Matrix-style code rain) using
+ * Three.js particle systems. Characters fall continuously with varying speeds.
+ * 
+ * @module matrixEffect
+ * @returns {THREE.Points} Points object representing falling characters
+ */
 import * as THREE from 'three';
 
+/**
+ * Creates Matrix-style falling code rain effect
+ * 
+ * @returns {THREE.Points} Points object with animated falling characters
+ */
 export function createMatrixEffect() {
     const effectGroup = new THREE.Group();
     

@@ -12,8 +12,20 @@
  * - Insertion: O(1) per object
  * - Query: O(1) per cell, O(k) where k is objects in nearby cells
  * - Space: O(n + gridSize³) where n is number of objects
+ * 
+ * @example
+ * // Create spatial grid
+ * const grid = new SpatialGrid(
+ *     { min: new Vector3(-50, -50, -50), max: new Vector3(50, 50, 50) },
+ *     2.0 // cell size
+ * );
+ * 
+ * // Insert objects
+ * grid.insert(body);
+ * 
+ * // Query nearby objects
+ * const nearby = grid.query(bbox);
  */
-
 import { Vector3 } from '../math/Vector3.js';
 
 export class SpatialGrid {

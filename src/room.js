@@ -1,5 +1,19 @@
+/**
+ * Room - 3D Room Geometry Creation
+ * 
+ * Creates a cube-shaped room with walls, floor, and ceiling.
+ * Uses Three.js planes with dark green materials and emissive glow.
+ * 
+ * @module room
+ * @returns {THREE.Group} Group containing all room geometry
+ */
 import * as THREE from 'three';
 
+/**
+ * Creates a cube-shaped room with Matrix-style aesthetic
+ * 
+ * @returns {THREE.Group} Group containing room walls, floor, and ceiling
+ */
 export function createRoom() {
     const roomGroup = new THREE.Group();
     

@@ -15,8 +15,14 @@
  * - Sphere-Sphere: Distance check
  * - Sphere-Box: Closest point on box
  * - Mesh-Mesh: Triangle-triangle intersection (expensive)
+ * 
+ * @example
+ * const narrowPhase = new NarrowPhase();
+ * const contact = narrowPhase.checkCollision(bodyA, bodyB);
+ * if (contact) {
+ *     console.log(`Penetration: ${contact.penetration}`);
+ * }
  */
-
 import { Vector3 } from '../math/Vector3.js';
 import { Box } from './shapes/Box.js';
 import { Sphere } from './shapes/Sphere.js';
@@ -24,7 +30,20 @@ import { Sphere } from './shapes/Sphere.js';
 export class NarrowPhase {
     /**
      * Check collision between two bodies
-     * Returns contact information or null if no collision
+     * 
+     * Performs precise collision detection and returns contact information
+     * if a collision is detected. Dispatches to appropriate collision function
+     * based on shape types.
+     * 
+     * @param {Body} bodyA - First physics body
+     * @param {Body} bodyB - Second physics body
+     * @returns {Object|null} Contact information with normal, penetration, contactPoint, or null if no collision
+     * @example
+     * const contact = narrowPhase.checkCollision(bodyA, bodyB);
+     * if (contact) {
+     *     // Bodies are colliding
+     *     console.log(`Normal: ${contact.normal}, Penetration: ${contact.penetration}`);
+     * }
      */
     checkCollision(bodyA, bodyB) {
         const shapeA = bodyA.collisionShape;
@@ -74,11 +93,18 @@ export class NarrowPhase {
     /**
      * Box-Box collision using SAT (Separating Axis Theorem)
      * 
+     * Tests collision between two box shapes using the Separating Axis Theorem.
+     * 
      * Mathematical:
      * For each axis (6 face normals + 9 edge cross products = 15 axes):
      * - Project both boxes onto axis
      * - Check if projections overlap
      * - If any axis has no overlap, boxes don't intersect
+     * 
+     * @param {Box} boxA - First box shape
+     * @param {Box} boxB - Second box shape
+     * @returns {Object|null} Contact information or null if no collision
+     * @private
      */
     boxBoxCollision(boxA, boxB) {
         const intersection = boxA.getIntersection(boxB);
@@ -98,10 +124,17 @@ export class NarrowPhase {
     /**
      * Sphere-Sphere collision
      * 
+     * Tests collision between two sphere shapes using distance calculation.
+     * 
      * Mathematical:
      * Distance between centers: d = |c1 - c2|
      * Intersection if: d < r1 + r2
      * Penetration: p = (r1 + r2) - d
+     * 
+     * @param {Sphere} sphereA - First sphere shape
+     * @param {Sphere} sphereB - Second sphere shape
+     * @returns {Object|null} Contact information or null if no collision
+     * @private
      */
     sphereSphereCollision(sphereA, sphereB) {
         const intersection = sphereA.getIntersection(sphereB);
@@ -120,7 +153,14 @@ export class NarrowPhase {
 
     /**
      * Box-Sphere collision
-     * Finds closest point on box to sphere center
+     * 
+     * Tests collision between a box and a sphere by finding the closest
+     * point on the box to the sphere center.
+     * 
+     * @param {Box} box - Box shape
+     * @param {Sphere} sphere - Sphere shape
+     * @returns {Object|null} Contact information or null if no collision
+     * @private
      */
     boxSphereCollision(box, sphere) {
         // Ensure box bounds are updated
@@ -192,6 +232,14 @@ export class NarrowPhase {
 
     /**
      * Fallback collision detection using bounding boxes
+     * 
+     * Used when no specific collision function exists for the shape combination.
+     * Performs a simple AABB intersection test.
+     * 
+     * @param {Body} bodyA - First body
+     * @param {Body} bodyB - Second body
+     * @returns {Object|null} Contact information or null if no collision
+     * @private
      */
     fallbackCollision(bodyA, bodyB) {
         const bboxA = bodyA.getBoundingBox();

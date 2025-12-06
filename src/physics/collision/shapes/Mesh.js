@@ -12,15 +12,37 @@
  * Point-in-triangle test uses barycentric coordinates:
  * p = α*v1 + β*v2 + γ*v3 where α + β + γ = 1
  * Point is inside if α, β, γ ≥ 0
+ * 
+ * @example
+ * // Create a mesh from vertices and indices
+ * const vertices = [
+ *     new Vector3(0, 0, 0),
+ *     new Vector3(1, 0, 0),
+ *     new Vector3(0, 1, 0)
+ * ];
+ * const indices = [0, 1, 2]; // Single triangle
+ * const mesh = new Mesh(vertices, indices);
  */
-
 import { Vector3 } from '../../math/Vector3.js';
 
 export class Mesh {
+    /**
+     * Creates a new Mesh collision shape
+     * 
+     * @param {Array<Vector3>} [vertices=[]] - Array of vertex positions
+     * @param {Array<number>} [indices=[]] - Array of triangle indices (groups of 3)
+     */
     constructor(vertices = [], indices = []) {
-        this.vertices = vertices; // Array of Vector3
-        this.indices = indices; // Array of triangle indices [i1, i2, i3, i4, i5, i6, ...]
-        this.triangles = []; // Precomputed triangles
+        /** @type {Array<Vector3>} Array of vertex positions */
+        this.vertices = vertices;
+        
+        /** @type {Array<number>} Array of triangle indices (groups of 3) */
+        this.indices = indices;
+        
+        /** @type {Array<Object>} Precomputed triangle data */
+        this.triangles = [];
+        
+        /** @type {Object} Bounding box with min and max Vector3 */
         this.bounds = { min: new Vector3(), max: new Vector3() };
         
         this.updateTriangles();

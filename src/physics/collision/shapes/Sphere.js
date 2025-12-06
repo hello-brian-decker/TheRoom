@@ -12,19 +12,40 @@
  * If d < r: point is inside
  * If d = r: point is on surface
  * If d > r: point is outside
+ * 
+ * @example
+ * // Create a sphere with radius 1.0
+ * const sphere = new Sphere(1.0);
+ * 
+ * // Attach to body
+ * body.collisionShape = sphere;
+ * sphere.body = body;
  */
-
 import { Vector3 } from '../../math/Vector3.js';
 
 export class Sphere {
+    /**
+     * Creates a new Sphere collision shape
+     * 
+     * @param {number} [radius=0.5] - Radius of the sphere
+     */
     constructor(radius = 0.5) {
+        /** @type {number} Radius of the sphere */
         this.radius = radius;
-        this.center = new Vector3(); // World-space center (updated each frame)
-        this.body = null; // Reference to physics body
+        
+        /** @type {Vector3} World-space center (updated each frame) */
+        this.center = new Vector3();
+        
+        /** @type {Body|null} Reference to physics body */
+        this.body = null;
     }
 
     /**
      * Set radius
+     * 
+     * @param {number} radius - New radius value
+     * @example
+     * sphere.setRadius(2.0); // Set radius to 2.0
      */
     setRadius(radius) {
         this.radius = radius;
@@ -32,6 +53,8 @@ export class Sphere {
 
     /**
      * Get radius
+     * 
+     * @returns {number} Current radius
      */
     getRadius() {
         return this.radius;
@@ -47,7 +70,15 @@ export class Sphere {
 
     /**
      * Check if point is inside sphere
+     * 
      * Mathematical: |p - c| ≤ r
+     * 
+     * @param {Vector3} point - Point to test
+     * @returns {boolean} True if point is inside sphere
+     * @example
+     * if (sphere.containsPoint(point)) {
+     *     console.log('Point is inside sphere');
+     * }
      */
     containsPoint(point) {
         const distanceSq = point.distanceToSquared(this.center);
@@ -56,8 +87,12 @@ export class Sphere {
 
     /**
      * Check if this sphere intersects another sphere
+     * 
      * Mathematical: Two spheres intersect if distance between centers ≤ sum of radii
      * |c1 - c2| ≤ r1 + r2
+     * 
+     * @param {Sphere} other - Other sphere to test
+     * @returns {boolean} True if spheres intersect
      */
     intersectsSphere(other) {
         const distance = this.center.distanceTo(other.center);
@@ -66,7 +101,11 @@ export class Sphere {
 
     /**
      * Get intersection with another sphere
-     * Returns penetration depth and normal
+     * 
+     * Calculates penetration depth, collision normal, and contact point.
+     * 
+     * @param {Sphere} other - Other sphere to test
+     * @returns {Object|null} Intersection data with penetration, normal, contactPoint, or null if no intersection
      */
     getIntersection(other) {
         const distance = this.center.distanceTo(other.center);
@@ -103,6 +142,11 @@ export class Sphere {
 
     /**
      * Check if sphere intersects box (AABB)
+     * 
+     * Tests collision between sphere and axis-aligned bounding box.
+     * 
+     * @param {Box} box - Box to test
+     * @returns {boolean} True if sphere intersects box
      */
     intersectsBox(box) {
         // Find closest point on box to sphere center
@@ -119,7 +163,11 @@ export class Sphere {
 
     /**
      * Get volume
+     * 
+     * Calculates the volume of the sphere.
      * Mathematical: V = (4/3) * π * r³
+     * 
+     * @returns {number} Volume in cubic units
      */
     getVolume() {
         return (4 / 3) * Math.PI * this.radius * this.radius * this.radius;
@@ -127,6 +175,10 @@ export class Sphere {
 
     /**
      * Clone this sphere
+     * 
+     * Creates a copy of the sphere with the same radius.
+     * 
+     * @returns {Sphere} New Sphere instance
      */
     clone() {
         return new Sphere(this.radius);

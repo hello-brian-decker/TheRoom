@@ -1,3 +1,11 @@
+/**
+ * Renderer - Three.js Scene Setup and Rendering
+ * 
+ * Initializes the 3D scene, camera, renderer, and animation loop.
+ * Sets up the room, matrix effects, and waterfall simulation.
+ * 
+ * @module renderer
+ */
 import * as THREE from 'three';
 import { createRoom } from './room.js';
 import { createMatrixEffect } from './matrixEffect.js';

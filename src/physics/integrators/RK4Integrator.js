@@ -20,19 +20,32 @@
  * - More expensive than Euler (4 function evaluations vs 1)
  * - Excellent for high-precision simulations
  * - Good energy conservation
+ * 
+ * @example
+ * // Use RK4 for orbital mechanics
+ * const accelFunc = (pos, vel, t) => {
+ *     const r = pos.length();
+ *     const force = pos.clone().negate().multiplyScalar(GM / (r * r * r));
+ *     return force;
+ * };
+ * RK4Integrator.integrate(position, velocity, accelFunc, deltaTime, currentTime);
  */
-
 import { Vector3 } from '../math/Vector3.js';
 
 export class RK4Integrator {
     /**
      * Integrate using Runge-Kutta 4th order method
      * 
-     * @param {Vector3} position - Current position
-     * @param {Vector3} velocity - Current velocity
-     * @param {Function} accelerationFunction - Function that computes acceleration: a(p, v, t)
-     * @param {number} deltaTime - Time step
-     * @param {number} currentTime - Current time (optional)
+     * Performs high-accuracy integration using four function evaluations.
+     * Best for systems requiring high precision (orbital mechanics, etc.).
+     * 
+     * @param {Vector3} position - Current position (modified in-place)
+     * @param {Vector3} velocity - Current velocity (modified in-place)
+     * @param {Function} accelerationFunction - Function that computes acceleration: a(p, v, t) -> Vector3
+     * @param {number} deltaTime - Time step in seconds
+     * @param {number} [currentTime=0] - Current time (for time-dependent forces)
+     * @example
+     * RK4Integrator.integrate(position, velocity, accelFunc, 0.016, time);
      */
     static integrate(position, velocity, accelerationFunction, deltaTime, currentTime = 0) {
         // k1: evaluate at current state
@@ -73,13 +86,18 @@ export class RK4Integrator {
 
     /**
      * Simplified RK4 for position-velocity systems
-     * Assumes acceleration is a function of position and velocity only
      * 
-     * @param {Vector3} position - Current position
-     * @param {Vector3} velocity - Current velocity
+     * Assumes acceleration is a function of position and velocity only
+     * (no explicit time dependence). Updates the acceleration parameter
+     * for use in the next step.
+     * 
+     * @param {Vector3} position - Current position (modified in-place)
+     * @param {Vector3} velocity - Current velocity (modified in-place)
      * @param {Vector3} acceleration - Current acceleration (will be recomputed)
      * @param {Function} accelerationFunction - Function: a(p, v) -> Vector3
-     * @param {number} deltaTime - Time step
+     * @param {number} deltaTime - Time step in seconds
+     * @example
+     * RK4Integrator.integrateSimple(position, velocity, acceleration, accelFunc, 0.016);
      */
     static integrateSimple(position, velocity, acceleration, accelerationFunction, deltaTime) {
         // k1

@@ -2,14 +2,33 @@
  * World - Physics World Container
  * 
  * Manages all physics bodies, handles collisions, and updates the simulation.
+ * The World class is the central coordinator for all physics simulation.
  * 
  * Mathematical Foundation:
  * The world integrates Newton's laws of motion:
  * 1. F = ma (force equals mass times acceleration)
  * 2. Every action has an equal and opposite reaction
  * 3. Conservation of momentum: Σ(mv) = constant
+ * 
+ * Simulation Process:
+ * 1. Apply forces (gravity, etc.)
+ * 2. Integrate motion (update positions/velocities)
+ * 3. Detect collisions
+ * 4. Resolve collisions (apply impulses)
+ * 5. Update constraints
+ * 
+ * @example
+ * // Create a physics world
+ * const world = new World();
+ * world.gravity.set(0, -9.81, 0);
+ * 
+ * // Add bodies
+ * const body = new Body();
+ * world.addBody(body);
+ * 
+ * // Step simulation
+ * world.step(1/60); // 60 FPS
  */
-
 import { Vector3 } from '../math/Vector3.js';
 import { Body } from './Body.js';
 import { EulerIntegrator } from '../integrators/EulerIntegrator.js';
@@ -48,6 +67,15 @@ export class World {
 
     /**
      * Add a body to the world
+     * 
+     * Adds a physics body to the simulation. The body will be affected by
+     * gravity, collisions, and other physics forces.
+     * 
+     * @param {Body} body - The physics body to add
+     * @example
+     * const body = new Body();
+     * body.position.set(0, 10, 0);
+     * world.addBody(body);
      */
     addBody(body) {
         if (!(body instanceof Body)) {
@@ -60,6 +88,13 @@ export class World {
 
     /**
      * Remove a body from the world
+     * 
+     * Removes a physics body from the simulation. The body will no longer
+     * be updated or participate in collisions.
+     * 
+     * @param {Body} body - The physics body to remove
+     * @example
+     * world.removeBody(body);
      */
     removeBody(body) {
         const index = this.bodies.indexOf(body);
@@ -70,7 +105,13 @@ export class World {
     }
 
     /**
-     * Clear all bodies
+     * Clear all bodies from the world
+     * 
+     * Removes all bodies and resets collision data.
+     * Useful for resetting the simulation.
+     * 
+     * @example
+     * world.clear(); // Remove all bodies
      */
     clear() {
         this.bodies = [];
@@ -112,6 +153,12 @@ export class World {
 
     /**
      * Fixed timestep update
+     * 
+     * Performs a single fixed timestep of the physics simulation.
+     * This ensures deterministic physics regardless of frame rate.
+     * 
+     * @param {number} deltaTime - Fixed time step in seconds
+     * @private
      */
     fixedStep(deltaTime) {
         // 1. Apply forces (gravity, etc.)
@@ -132,6 +179,12 @@ export class World {
 
     /**
      * Apply forces to all bodies
+     * 
+     * Applies gravity and damping to all dynamic bodies.
+     * Called automatically during simulation step.
+     * 
+     * @param {number} deltaTime - Time step in seconds
+     * @private
      */
     applyForces(deltaTime) {
         for (const body of this.bodies) {
@@ -149,7 +202,13 @@ export class World {
 
     /**
      * Integrate motion for all bodies
-     * Updates positions and velocities based on forces and acceleration
+     * 
+     * Updates positions and velocities based on forces and acceleration.
+     * Uses Euler integration by default.
+     * Called automatically during simulation step.
+     * 
+     * @param {number} deltaTime - Time step in seconds
+     * @private
      */
     integrate(deltaTime) {
         for (const body of this.bodies) {
@@ -173,7 +232,12 @@ export class World {
 
     /**
      * Detect collisions between bodies
-     * Placeholder - actual detection is done by collision system
+     * 
+     * Placeholder method - actual collision detection is handled by
+     * the collision system (CollisionDetector). This method clears
+     * previous collision data.
+     * 
+     * @private
      */
     detectCollisions() {
         // Collision detection is handled by collision system
@@ -185,10 +249,16 @@ export class World {
     /**
      * Resolve collisions using impulse-based method
      * 
+     * Applies impulses to colliding bodies to separate them and simulate
+     * realistic collision response with friction and restitution.
+     * 
      * Mathematical Foundation:
      * When two bodies collide, we apply impulses to separate them.
      * Impulse: J = -(1 + e) * (v_rel · n) / (1/m1 + 1/m2)
      * where e is coefficient of restitution, v_rel is relative velocity, n is collision normal
+     * 
+     * @param {number} deltaTime - Time step in seconds
+     * @private
      */
     resolveCollisions(deltaTime) {
         for (const contact of this.contacts) {
@@ -236,6 +306,15 @@ export class World {
 
     /**
      * Get relative velocity between two bodies at contact point
+     * 
+     * Calculates the relative velocity along the collision normal.
+     * Used for collision resolution.
+     * 
+     * @param {Body} bodyA - First body
+     * @param {Body} bodyB - Second body
+     * @param {Vector3} normal - Collision normal
+     * @returns {number} Relative velocity along normal
+     * @private
      */
     getRelativeVelocity(bodyA, bodyB, normal) {
         const vA = bodyA.velocity.clone();
@@ -246,6 +325,15 @@ export class World {
 
     /**
      * Calculate friction impulse
+     * 
+     * Calculates the friction impulse to apply during collision resolution.
+     * Uses Coulomb friction model.
+     * 
+     * @param {Body} bodyA - First body
+     * @param {Body} bodyB - Second body
+     * @param {Object} contact - Contact information
+     * @returns {Vector3} Friction impulse vector
+     * @private
      */
     calculateFrictionImpulse(bodyA, bodyB, contact) {
         const relativeVelocity = new Vector3().subVectors(bodyA.velocity, bodyB.velocity);
@@ -264,7 +352,21 @@ export class World {
 
     /**
      * Raycast into the world
-     * Returns first body hit by ray
+     * 
+     * Casts a ray into the world and returns the first body hit.
+     * Currently a placeholder - full implementation would test against
+     * all collision shapes.
+     * 
+     * @param {Vector3} origin - Ray origin point
+     * @param {Vector3} direction - Ray direction (should be normalized)
+     * @param {number} [maxDistance=Infinity] - Maximum ray distance
+     * @returns {Object|null} Hit information or null if no hit
+     * @example
+     * const hit = world.raycast(
+     *     new Vector3(0, 10, 0),
+     *     new Vector3(0, -1, 0),
+     *     20
+     * );
      */
     raycast(origin, direction, maxDistance = Infinity) {
         let closestHit = null;

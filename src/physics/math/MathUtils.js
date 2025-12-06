@@ -2,8 +2,18 @@
  * MathUtils - Mathematical Utility Functions
  * 
  * Common mathematical functions used throughout the physics engine.
+ * All methods are static utility functions.
+ * 
+ * @example
+ * // Clamp a value
+ * const clamped = MathUtils.clamp(value, 0, 100);
+ * 
+ * // Linear interpolation
+ * const interpolated = MathUtils.lerp(start, end, 0.5);
+ * 
+ * // Convert degrees to radians
+ * const radians = MathUtils.degToRad(90);
  */
-
 export class MathUtils {
     /**
      * Clamp value between min and max

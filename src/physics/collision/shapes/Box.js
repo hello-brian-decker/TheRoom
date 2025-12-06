@@ -11,23 +11,43 @@
  * 
  * A point p is inside the box if:
  * x_min ≤ p.x ≤ x_max AND y_min ≤ p.y ≤ y_max AND z_min ≤ p.z ≤ z_max
+ * 
+ * @example
+ * // Create a 2x2x2 box (half extents are 1x1x1)
+ * const box = new Box(new Vector3(1, 1, 1));
+ * 
+ * // Attach to body
+ * body.collisionShape = box;
+ * box.body = body;
  */
-
 import { Vector3 } from '../../math/Vector3.js';
 
 export class Box {
+    /**
+     * Creates a new Box collision shape
+     * 
+     * @param {Vector3} [halfExtents] - Half extents (half width, half height, half depth). Defaults to (0.5, 0.5, 0.5)
+     */
     constructor(halfExtents) {
-        // Half extents (half width, half height, half depth)
+        /** @type {Vector3} Half extents (half width, half height, half depth) */
         this.halfExtents = halfExtents ? halfExtents.clone() : new Vector3(0.5, 0.5, 0.5);
         
-        // Cached min/max for world space
+        /** @type {Vector3} World-space minimum point (updated each frame) */
         this.min = new Vector3();
+        
+        /** @type {Vector3} World-space maximum point (updated each frame) */
         this.max = new Vector3();
-        this.body = null; // Reference to physics body
+        
+        /** @type {Body|null} Reference to physics body */
+        this.body = null;
     }
 
     /**
      * Set half extents
+     * 
+     * @param {Vector3} halfExtents - New half extents
+     * @example
+     * box.setHalfExtents(new Vector3(2, 1, 1)); // 4x2x2 box
      */
     setHalfExtents(halfExtents) {
         this.halfExtents.copy(halfExtents);
@@ -35,6 +55,8 @@ export class Box {
 
     /**
      * Get half extents
+     * 
+     * @returns {Vector3} Current half extents
      */
     getHalfExtents() {
         return this.halfExtents;
@@ -66,6 +88,13 @@ export class Box {
 
     /**
      * Check if point is inside box
+     * 
+     * @param {Vector3} point - Point to test
+     * @returns {boolean} True if point is inside box
+     * @example
+     * if (box.containsPoint(point)) {
+     *     console.log('Point is inside box');
+     * }
      */
     containsPoint(point) {
         return (
@@ -77,7 +106,11 @@ export class Box {
 
     /**
      * Check if this box intersects another box
+     * 
      * Mathematical: Two AABBs intersect if they overlap on all axes
+     * 
+     * @param {Box} other - Other box to test
+     * @returns {boolean} True if boxes intersect
      */
     intersectsBox(other) {
         return (
@@ -89,7 +122,11 @@ export class Box {
 
     /**
      * Get intersection with another box
-     * Returns penetration depth and normal
+     * 
+     * Calculates penetration depth, collision normal, and contact point.
+     * 
+     * @param {Box} other - Other box to test
+     * @returns {Object|null} Intersection data with penetration, normal, contactPoint, or null if no intersection
      */
     getIntersection(other) {
         if (!this.intersectsBox(other)) {
@@ -133,6 +170,10 @@ export class Box {
 
     /**
      * Get volume
+     * 
+     * Calculates the volume of the box.
+     * 
+     * @returns {number} Volume in cubic units
      */
     getVolume() {
         const size = new Vector3().subVectors(this.max, this.min);
@@ -141,6 +182,10 @@ export class Box {
 
     /**
      * Clone this box
+     * 
+     * Creates a copy of the box with the same half extents.
+     * 
+     * @returns {Box} New Box instance
      */
     clone() {
         return new Box(this.halfExtents);

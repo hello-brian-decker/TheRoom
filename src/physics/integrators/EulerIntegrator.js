@@ -17,22 +17,33 @@
  * - Simple and fast
  * - Can be unstable for large time steps
  * - Energy may not be conserved (can gain/lose energy)
+ * 
+ * @example
+ * // Integrate motion for one time step
+ * EulerIntegrator.integrate(
+ *     body.position,
+ *     body.velocity,
+ *     body.acceleration,
+ *     1/60 // 60 FPS
+ * );
  */
-
 import { Vector3 } from '../math/Vector3.js';
 
 export class EulerIntegrator {
     /**
      * Integrate position and velocity using explicit Euler method
      * 
+     * Updates position and velocity in-place based on acceleration.
      * Mathematical:
      * v(t+dt) = v(t) + a(t) * dt
      * p(t+dt) = p(t) + v(t) * dt
      * 
-     * @param {Vector3} position - Current position
-     * @param {Vector3} velocity - Current velocity
+     * @param {Vector3} position - Current position (modified in-place)
+     * @param {Vector3} velocity - Current velocity (modified in-place)
      * @param {Vector3} acceleration - Current acceleration
-     * @param {number} deltaTime - Time step
+     * @param {number} deltaTime - Time step in seconds
+     * @example
+     * EulerIntegrator.integrate(position, velocity, acceleration, 0.016);
      */
     static integrate(position, velocity, acceleration, deltaTime) {
         // Update velocity: v = v + a * dt
@@ -48,12 +59,20 @@ export class EulerIntegrator {
 
     /**
      * Semi-implicit Euler (Symplectic Euler)
-     * Updates position first, then velocity
-     * Better energy conservation than explicit Euler
+     * 
+     * Updates position first, then velocity. Better energy conservation
+     * than explicit Euler method. Also known as Symplectic Euler.
      * 
      * Mathematical:
      * p(t+dt) = p(t) + v(t) * dt
      * v(t+dt) = v(t) + a(t+dt) * dt
+     * 
+     * @param {Vector3} position - Current position (modified in-place)
+     * @param {Vector3} velocity - Current velocity (modified in-place)
+     * @param {Vector3} acceleration - Current acceleration
+     * @param {number} deltaTime - Time step in seconds
+     * @example
+     * EulerIntegrator.integrateSemiImplicit(position, velocity, acceleration, 0.016);
      */
     static integrateSemiImplicit(position, velocity, acceleration, deltaTime) {
         // Update position first: p = p + v * dt

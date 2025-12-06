@@ -12,21 +12,54 @@
  * Complexity:
  * - Brute force: O(n²)
  * - With spatial partitioning: O(n + k) where k << n²
+ * 
+ * @example
+ * // Create broad phase with spatial grid
+ * const broadPhase = new BroadPhase('grid');
+ * broadPhase.initialize({ min: new Vector3(-50, -50, -50), max: new Vector3(50, 50, 50) }, 2.0);
+ * 
+ * // Update with objects
+ * broadPhase.update(bodies);
+ * 
+ * // Get potential collision pairs
+ * const pairs = broadPhase.getPotentialPairs(bodies);
  */
-
 import { SpatialGrid } from '../spatial/SpatialGrid.js';
 import { BVH } from '../spatial/BVH.js';
 
 export class BroadPhase {
+    /**
+     * Creates a new BroadPhase collision detector
+     * 
+     * @param {string} [method='grid'] - Broad phase method: 'grid', 'bvh', or 'brute'
+     */
     constructor(method = 'grid') {
-        this.method = method; // 'grid', 'bvh', 'brute'
+        /** @type {string} Broad phase method being used */
+        this.method = method;
+        
+        /** @type {SpatialGrid|null} Spatial grid instance (if using grid method) */
         this.spatialGrid = null;
+        
+        /** @type {BVH|null} BVH instance (if using BVH method) */
         this.bvh = null;
+        
+        /** @type {Object|null} World bounds */
         this.bounds = null;
     }
 
     /**
-     * Initialize with bounds
+     * Initialize broad phase with world bounds
+     * 
+     * Sets up the spatial partitioning structure based on the chosen method.
+     * Must be called before using the broad phase.
+     * 
+     * @param {Object} bounds - World bounds with min and max Vector3 properties
+     * @param {number} [cellSize=2.0] - Cell size for spatial grid (only used with 'grid' method)
+     * @example
+     * broadPhase.initialize(
+     *     { min: new Vector3(-100, -100, -100), max: new Vector3(100, 100, 100) },
+     *     2.0
+     * );
      */
     initialize(bounds, cellSize = 2.0) {
         this.bounds = bounds;
@@ -40,6 +73,13 @@ export class BroadPhase {
 
     /**
      * Update broad phase (insert/update objects)
+     * 
+     * Updates the spatial partitioning structure with current object positions.
+     * Should be called every frame before collision detection.
+     * 
+     * @param {Array<Body>} objects - Array of physics bodies to update
+     * @example
+     * broadPhase.update(world.bodies);
      */
     update(objects) {
         if (this.method === 'grid' && this.spatialGrid) {
@@ -54,7 +94,17 @@ export class BroadPhase {
 
     /**
      * Get potential collision pairs
-     * Returns array of [bodyA, bodyB] pairs
+     * 
+     * Returns pairs of objects that might be colliding based on spatial proximity.
+     * These pairs should be tested in narrow phase for actual collision.
+     * 
+     * @param {Array<Body>} objects - Array of physics bodies
+     * @returns {Array<Array<Body>>} Array of [bodyA, bodyB] pairs
+     * @example
+     * const pairs = broadPhase.getPotentialPairs(bodies);
+     * for (const [bodyA, bodyB] of pairs) {
+     *     // Test for actual collision in narrow phase
+     * }
      */
     getPotentialPairs(objects) {
         const pairs = [];
@@ -127,6 +177,20 @@ export class BroadPhase {
 
     /**
      * Check if two bodies should collide based on collision groups
+     * 
+     * Uses collision groups and masks to filter collisions.
+     * Bodies only collide if their groups match each other's masks.
+     * 
+     * @param {Body} bodyA - First body
+     * @param {Body} bodyB - Second body
+     * @returns {boolean} True if bodies should collide
+     * @example
+     * // Set collision groups
+     * bodyA.collisionGroup = 1; // Group 1
+     * bodyA.collisionMask = 2;   // Can collide with group 2
+     * bodyB.collisionGroup = 2; // Group 2
+     * bodyB.collisionMask = 1;   // Can collide with group 1
+     * // These bodies will collide
      */
     shouldCollide(bodyA, bodyB) {
         // Check collision groups/masks
@@ -140,6 +204,17 @@ export class BroadPhase {
 
     /**
      * Quick AABB intersection test
+     * 
+     * Tests if two bodies' axis-aligned bounding boxes intersect.
+     * Used as a quick rejection test in broad phase.
+     * 
+     * @param {Body} bodyA - First body
+     * @param {Body} bodyB - Second body
+     * @returns {boolean} True if AABBs intersect
+     * @example
+     * if (broadPhase.aabbIntersect(bodyA, bodyB)) {
+     *     // Bodies might be colliding, test in narrow phase
+     * }
      */
     aabbIntersect(bodyA, bodyB) {
         try {
@@ -163,6 +238,13 @@ export class BroadPhase {
 
     /**
      * Get statistics
+     * 
+     * Returns performance and usage statistics for the broad phase.
+     * 
+     * @returns {Object} Statistics object (contents depend on method)
+     * @example
+     * const stats = broadPhase.getStats();
+     * console.log(`Used cells: ${stats.usedCells}`);
      */
     getStats() {
         if (this.method === 'grid' && this.spatialGrid) {

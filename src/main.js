@@ -1,3 +1,11 @@
+/**
+ * Main Process - Electron Application Entry Point
+ * 
+ * Electron main process that creates and manages application windows.
+ * Handles window lifecycle and loads the application in development or production mode.
+ * 
+ * @module main
+ */
 import { app, BrowserWindow } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
