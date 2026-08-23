@@ -5,6 +5,7 @@
   "main": "src/main.js",
   "type": "module",
   "scripts": {
+    "start": "./start.sh",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

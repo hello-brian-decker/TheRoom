@@ -50,7 +50,7 @@ export class PhysicsDocumentation {
         `;
         
         const title = document.createElement('div');
-        title.textContent = content.title || 'Mathematical Documentation';
+        title.textContent = this.content.title || 'Mathematical Documentation';
         header.appendChild(title);
 
         const closeBtn = document.createElement('button');

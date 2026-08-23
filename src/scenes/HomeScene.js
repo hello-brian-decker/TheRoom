@@ -64,30 +64,38 @@ export class HomeScene {
         this.camera.position.set(0, 2, 5);
         this.camera.lookAt(0, 0, 0);
 
-        // Renderer setup
-        this.renderer = new THREE.WebGLRenderer({ 
-            canvas: this.canvas,
-            antialias: true 
-        });
+        // Create welcome text/UI (using HTML overlay)
+        this.createWelcomeUI();
+
+        // Create documentation browser
+        this.createDocumentationBrowser();
+
+        // Renderer setup. This is the one step that can fail on machines without
+        // a usable WebGL context, so build the HTML overlay above it - otherwise
+        // a failure here leaves the page completely blank.
+        try {
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: this.canvas,
+                antialias: true
+            });
+        } catch (error) {
+            console.error('WebGL unavailable, continuing without the 3D view:', error);
+            this.canvas.style.display = 'none';
+            return;
+        }
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         // Lighting - Bright lab lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         this.scene.add(ambientLight);
-        
+
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(5, 10, 5);
         this.scene.add(directionalLight);
 
         // Create lab floor
         this.createLabFloor();
-
-        // Create welcome text/UI (using HTML overlay)
-        this.createWelcomeUI();
-
-        // Create documentation browser
-        this.createDocumentationBrowser();
 
         // Handle window resize
         window.addEventListener('resize', () => this.handleResize());

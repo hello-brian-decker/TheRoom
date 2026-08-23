@@ -47,7 +47,13 @@ export class Router {
      */
     async handleRoute() {
         const route = this.getCurrentRoute();
-        
+
+        // Clear any error left over from a previous route
+        const staleError = document.getElementById('route-error');
+        if (staleError) {
+            staleError.remove();
+        }
+
         // Clean up current scene
         if (this.currentScene && this.currentScene.dispose) {
             this.currentScene.dispose();
@@ -77,7 +83,48 @@ export class Router {
             }
         } catch (error) {
             console.error(`Error creating scene for route ${route}:`, error);
+            this.showError(route, error);
         }
+    }
+
+    /**
+     * Show a scene failure on the page.
+     *
+     * Scenes render into a canvas, so a failure during creation otherwise leaves
+     * nothing on screen and the only trace is a console message.
+     */
+    showError(route, error) {
+        let banner = document.getElementById('route-error');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'route-error';
+            banner.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 3000;
+                max-width: 600px;
+                padding: 25px 30px;
+                background: #fff;
+                border: 2px solid #cc0033;
+                border-radius: 8px;
+                font-family: 'Arial', sans-serif;
+                color: #333;
+            `;
+            document.body.appendChild(banner);
+        }
+        banner.innerHTML = '';
+
+        const title = document.createElement('h2');
+        title.textContent = `Could not load ${route}`;
+        title.style.cssText = 'margin: 0 0 10px 0; color: #cc0033; font-size: 20px;';
+        banner.appendChild(title);
+
+        const detail = document.createElement('p');
+        detail.textContent = error && error.message ? error.message : String(error);
+        detail.style.cssText = 'margin: 0; font-size: 14px; line-height: 1.5;';
+        banner.appendChild(detail);
     }
 
     /**
