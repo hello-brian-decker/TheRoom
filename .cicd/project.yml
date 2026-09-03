@@ -1,0 +1,28 @@
+# CustomAppLab fleet operations manifest — reduced profile (static).
+# Standard: g01-base-infra/docs/fleet-operations.md
+#
+# Three.js browser app, no backend. "staging" can only mean a preview server
+# over dist/. Note vite.config.js sets strictPort: false, so the dev server
+# silently moves to the next free port — staging pins it instead.
+schema: 1
+project: TheRoom
+slug: theroom
+kind: static
+repo: hello-brian-decker/TheRoom
+default_branch: main
+
+environments:
+  staging:
+    url: http://localhost:7878
+    health_mode: tcp
+    ports: [7878]
+    requires: node lsof
+    log_dir: /opt/logs/TheRoom/staging
+    autostart: none
+
+  dev:
+    url: http://localhost:7878
+    health_mode: tcp
+    ports: [7878]
+    requires: node
+    autostart: none

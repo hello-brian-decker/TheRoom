@@ -1,0 +1,81 @@
+# Bring theroom's staging stack up on the Mac Mini.
+#
+# Staging runs on the self-hosted runner's own host, so this workflow does not
+# check out an ephemeral copy — it drives the canonical working copy at
+# /opt/apps/TheRoom, which is where the staging config, the named volumes
+# and any restored data actually live.
+#
+# Everything here goes through .cicd/ops.sh, so this file stays identical across
+# the fleet: the per-project detail lives in .cicd/project.yml and
+# .cicd/bindings.sh, not here.
+#
+# Requires: nothing from Azure — staging is local Docker/processes.
+# Runner:   self-hosted Mac Mini
+name: Staging - Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_code:
+        description: 'git pull --ff-only the working copy first (skipped on a dirty tree)'
+        required: false
+        default: false
+        type: boolean
+      restore_from_prod:
+        description: 'Restore the staging database from the newest prod dump before starting'
+        required: false
+        default: false
+        type: boolean
+
+# Staging is local; no cloud auth needed.
+permissions:
+  contents: read
+
+# One staging deploy at a time. Queue rather than cancel, so a second dispatch
+# never kills a stack half-way up.
+concurrency:
+  group: theroom-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy theroom staging
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 30
+
+    env:
+      APP_DIR: /opt/apps/TheRoom
+
+    steps:
+      - name: Bring up staging
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test -d "$APP_DIR" || { echo "::error::$APP_DIR not found on this runner"; exit 1; }
+          cd "$APP_DIR"
+
+          if [ "${{ inputs.update_code }}" = "true" ]; then
+            echo ">> updating working copy (best-effort)…"
+            git pull --ff-only \
+              || echo "::warning::git pull --ff-only failed (dirty or diverged) — deploying the current on-disk state"
+          fi
+
+          if [ "${{ inputs.restore_from_prod }}" = "true" ]; then
+            echo ">> restoring staging from the newest prod dump…"
+            .cicd/ops.sh staging restore-db --from prod --yes
+          fi
+
+          .cicd/ops.sh staging up
+
+      - name: Health check
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cd "$APP_DIR"
+          .cicd/ops.sh staging health
+
+      - name: Diagnostics on failure
+        if: failure()
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cd "$APP_DIR" || exit 0
+          echo "=== status ===";  .cicd/ops.sh staging status || true
+          echo "=== doctor ===";  .cicd/ops.sh staging doctor || true
