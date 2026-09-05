@@ -11,6 +11,11 @@
 # THIS FILE IS IDENTICAL IN EVERY REPO. Do not put project logic here — it
 # belongs in .cicd/bindings.sh. Verify with:  .cicd/ops.sh --version
 #
+# It is also identical on every OS: macOS, Linux and Windows (Git Bash) are
+# detected at startup and every platform-specific primitive — file modes,
+# digests, port probes, the service manager behind `autostart` — dispatches
+# on that. `--version` prints which platform it decided it is on.
+#
 # Resolution order for a local verb:
 #   1. a function named <env>_<verb> in .cicd/bindings.sh   (project-specific)
 #   2. a generic implementation driven by .cicd/project.yml (health, backup-db,
@@ -23,7 +28,7 @@
 # See: g01-base-infra/docs/fleet-operations.md
 set -euo pipefail
 
-OPS_VERSION="1.0.0"
+OPS_VERSION="1.1.0"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -43,6 +48,111 @@ note() { [[ "$QUIET" == 1 ]] || printf '%s%s%s\n' "$DIM" "$*" "$NC" >&2; }
 die()  { err "$1"; exit "${2:-1}"; }
 have() { declare -F "$1" >/dev/null 2>&1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required but not on PATH." 4; }
+
+# --------------------------------------------------------------- platform ---
+# The fleet registry (g01-base-deploy/hosts.yml) declares an `os:` per host,
+# and a play will chdir into a checkout on ANY of them and run this script.
+# So the ops layer cannot assume the Mac mini. Every primitive below has a
+# different spelling per platform — `stat -f` vs `stat -c`, `shasum` vs
+# `sha256sum`, `lsof` vs `ss` vs `netstat -ano`, launchd vs systemd vs
+# schtasks — and guessing wrong fails deep inside a verb, long after the
+# point where it could have said something useful.
+#
+# "windows" means Git Bash (MSYS/MinGW) or Cygwin. A native cmd or PowerShell
+# session cannot run this script at all, so there is no fourth case to model.
+#
+# Deliberately NOT exported and deliberately not called OS: Windows already
+# ships OS=Windows_NT in the environment and tools read it.
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  Darwin)               OPS_OS=mac ;;
+  Linux)                OPS_OS=linux ;;
+  MINGW*|MSYS*|CYGWIN*) OPS_OS=windows ;;
+  *)                    OPS_OS=unknown ;;
+esac
+
+# os_sha256 <file> — the digest alone, no filename, no leading spaces.
+os_sha256() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  else
+    echo unknown
+  fi
+}
+
+# os_file_mode <file> — permission bits in octal, or a marker when the
+# platform has none to give. Windows authorises by ACL; Git Bash answers
+# `stat` with an invented 0644/0755 that means nothing, so saying "n/a" is
+# more honest than reporting a number no one set.
+os_file_mode() {
+  case "$OPS_OS" in
+    mac)     stat -f '%Lp' "$1" 2>/dev/null || echo '?' ;;
+    linux)   stat -c '%a'  "$1" 2>/dev/null || echo '?' ;;
+    windows) echo 'n/a' ;;
+    *)       stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || echo '?' ;;
+  esac
+}
+
+# os_port_pids <port> — pids holding a TCP port open, one per line.
+# Git Bash has no lsof and Windows netstat reports the owning pid itself;
+# a minimal Linux container often has ss but not lsof.
+#
+# ALWAYS succeeds. "nothing is listening" is an answer, not a failure, but
+# lsof exits 1 when it matches nothing and `set -o pipefail` carries that out
+# of the pipeline — so `pids="$(os_port_pids 8089)"` in a binding would abort
+# the whole verb under `set -e` on the perfectly normal path where the port
+# is free. Callers test the string; they must never have to guard the call.
+os_port_pids() {
+  local port="$1"
+  _os_port_pids "$port" || true
+}
+_os_port_pids() {
+  local port="$1"
+  case "$OPS_OS" in
+    windows)
+      netstat -ano 2>/dev/null | awk -v p=":$port" \
+        '$1 == "TCP" && $4 == "LISTENING" && substr($2, length($2)-length(p)+1) == p {print $5}' \
+        | sort -u ;;
+    *)
+      if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u
+      elif command -v ss >/dev/null 2>&1; then
+        ss -lntpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u
+      elif command -v netstat >/dev/null 2>&1; then
+        netstat -lntp 2>/dev/null | awk -v p=":$port" '$4 ~ p"$" {split($7,a,"/"); print a[1]}' | sort -u
+      fi ;;
+  esac
+}
+
+# os_port_busy <port> — true when something is listening.
+os_port_busy() { [[ -n "$(os_port_pids "$1")" ]]; }
+
+# os_kill_port <port> [force] — stop whatever holds a TCP port.
+#
+# The portable replacement for the `lsof … -t | xargs kill` that nine repos'
+# staging_down still spells by hand. Two things make that form wrong off
+# macOS: lsof is not there, and the pids Windows netstat reports are native
+# Windows pids that Git Bash's `kill` cannot signal at all — taskkill is the
+# only thing that can. Always succeeds; an unheld port is not an error.
+os_kill_port() {
+  local port="$1" force="${2:-}" pids pid
+  pids="$(os_port_pids "$port")"
+  [[ -n "$pids" ]] || return 0
+  for pid in $pids; do
+    case "$OPS_OS" in
+      windows)
+        if [[ "$force" == force ]]; then taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+        else taskkill //PID "$pid" >/dev/null 2>&1 || true; fi ;;
+      *)
+        if [[ "$force" == force ]]; then kill -9 "$pid" 2>/dev/null || true
+        else kill "$pid" 2>/dev/null || true; fi ;;
+    esac
+  done
+  return 0
+}
 
 usage() {
   cat >&2 <<EOF
@@ -78,7 +188,7 @@ for a in "$@"; do
     --yes|-y)  ASSUME_YES=1 ;;
     --quiet|-q) QUIET=1 ;;
     --dry-run) DRY=1 ;;
-    --version) printf 'ops.sh %s\n' "$OPS_VERSION"; exit 0 ;;
+    --version) printf 'ops.sh %s (%s)\n' "$OPS_VERSION" "$OPS_OS"; exit 0 ;;
     --help|-h) usage ;;
     *) ARGS+=("$a") ;;
   esac
@@ -174,7 +284,7 @@ generic_health() {
   # better an honest liveness check than a heavy GET / that forks subprocesses.
   if [[ "${E_HEALTH_MODE:-http}" == "tcp" ]]; then
     local hp="${E_PORTS%% *}" live=1
-    if lsof -nP -iTCP:"$hp" -sTCP:LISTEN >/dev/null 2>&1; then live=0; fi
+    if os_port_busy "$hp"; then live=0; fi
     if [[ "$JSON" == 1 ]]; then
       printf '{"project":"%s","env":"%s","mode":"tcp","port":"%s","healthy":%s}\n' \
         "$PROJECT" "$ENV_NAME" "$hp" "$([[ $live == 0 ]] && echo true || echo false)"
@@ -240,7 +350,7 @@ generic_backup_db() {
 
   # Sidecar: a backup you cannot verify is not a backup.
   local sha size commit engine
-  sha="$(shasum -a 256 "$out" | cut -d' ' -f1)"
+  sha="$(os_sha256 "$out")"
   size="$(wc -c < "$out" | tr -d ' ')"
   commit="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   engine="$(docker exec "$c" postgres --version 2>/dev/null | head -1 || echo unknown)"
@@ -314,22 +424,57 @@ generic_restore_db() {
   ok "restored $db from $(basename "$src")"
 }
 
-# --------------------------------------------- launchd plist generator ------
-# Bare-process projects call this from their bindings' <env>_autostart_install.
-# The plist is GENERATED, never committed: the one committed plist in this fleet
-# points at a directory that does not exist on this host.
+# --------------------------------------------- autostart service writer -----
+# Bare-process projects call write_autostart_service from their bindings'
+# <env>_autostart_install. The unit is GENERATED, never committed: the one
+# committed plist in this fleet points at a directory that does not exist on
+# this host, which is exactly the failure mode generating it avoids.
 #
-#   write_launchd_plist <label> <program> [args...]
-write_launchd_plist() {
+#   write_autostart_service <label> <program> [args...]
+#
+# Three service managers, one interface. A binding says "keep this process
+# alive across reboots" and does not care which of them is doing it.
+#
+# A binding that needs the service to carry environment variables sets
+# OPS_SERVICE_ENV before calling:
+#
+#   OPS_SERVICE_ENV=( "APP_ENV=staging" "APP_CONFIG=$dir/config.json" )
+#
+# This matters more than it looks. A service started by the OS inherits none
+# of the shell environment the operator had, so a unit that omits the two
+# variables telling the app which config and which environment it is will
+# come up at boot pointing somewhere else entirely — and only at boot, which
+# is the worst time to discover it.
+write_autostart_service() {
+  case "$OPS_OS" in
+    mac)     _autostart_write_launchd "$@" ;;
+    linux)   _autostart_write_systemd "$@" ;;
+    windows) _autostart_write_schtasks "$@" ;;
+    *) err "autostart is not supported on this platform ($(uname -s 2>/dev/null))"; return 3 ;;
+  esac
+}
+
+# Kept because six repos' bindings.sh already call it by this name. It now
+# writes whatever the host's service manager is, so those repos gained Linux
+# and Windows autostart without editing a line.
+write_launchd_plist() { write_autostart_service "$@"; }
+
+_autostart_write_launchd() {
   local label="$1"; shift
   local plist="$HOME/Library/LaunchAgents/$label.plist"
   local logfile="$LOG_DIR/${ENV_NAME}.log"
   if dry; then note "would write $plist and load $label"; return 0; fi
+  need launchctl
   mkdir -p "$LOG_DIR" "$(dirname "$plist")"
 
-  local args=""
-  local a
+  local args="" a
   for a in "$@"; do args+="    <string>$a</string>"$'\n'; done
+
+  local envxml="" kv
+  for kv in ${OPS_SERVICE_ENV[@]+"${OPS_SERVICE_ENV[@]}"}; do
+    envxml+="    <key>${kv%%=*}</key><string>${kv#*=}</string>"$'\n'
+  done
+  [[ -n "$envxml" ]] && envxml="  <key>EnvironmentVariables</key>"$'\n'"  <dict>"$'\n'"$envxml  </dict>"$'\n'
 
   cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -340,7 +485,7 @@ write_launchd_plist() {
   <key>ProgramArguments</key>
   <array>
 $args  </array>
-  <key>WorkingDirectory</key><string>$ROOT</string>
+$envxml  <key>WorkingDirectory</key><string>$ROOT</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
@@ -353,6 +498,94 @@ PLIST
   launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$plist"
   ok "autostart on — $label installed (RunAtLoad + KeepAlive), logging to $logfile"
+}
+
+_autostart_write_systemd() {
+  local label="$1"; shift
+  local unit="$HOME/.config/systemd/user/$label.service"
+  local logfile="$LOG_DIR/${ENV_NAME}.log"
+  if dry; then note "would write $unit and enable $label"; return 0; fi
+  need systemctl
+  mkdir -p "$LOG_DIR" "$(dirname "$unit")"
+
+  # systemd does its own quoting: double quotes, with \ and " escaped. This is
+  # not shell quoting and printf %q would produce the wrong thing here.
+  # No leading space: systemd wants the executable as the first token of the
+  # value, and a stray one is at best tolerated and at worst a parse error.
+  local execstart="" a q sep=""
+  for a in "$@"; do
+    q="${a//\\/\\\\}"; q="${q//\"/\\\"}"
+    execstart+="$sep\"$q\""; sep=" "
+  done
+
+  local envlines="" kv
+  for kv in ${OPS_SERVICE_ENV[@]+"${OPS_SERVICE_ENV[@]}"}; do
+    q="${kv#*=}"; q="${q//\\/\\\\}"; q="${q//\"/\\\"}"
+    envlines+="Environment=\"${kv%%=*}=$q\""$'\n'
+  done
+
+  cat > "$unit" <<UNIT
+[Unit]
+Description=$label
+After=network-online.target
+
+[Service]
+Type=simple
+${envlines}WorkingDirectory=$ROOT
+ExecStart=$execstart
+Restart=always
+RestartSec=10
+StandardOutput=append:$logfile
+StandardError=append:$logfile
+
+[Install]
+WantedBy=default.target
+UNIT
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now "$label.service"
+  ok "autostart on — $label installed (Restart=always), logging to $logfile"
+  # A user unit dies with the last session unless lingering is on, which is
+  # the difference between "starts at login" and "starts at boot".
+  loginctl show-user "$(id -un)" -p Linger 2>/dev/null | grep -q 'Linger=yes' \
+    || warn "user lingering is off, so $label starts at login, not at boot: sudo loginctl enable-linger $(id -un)"
+}
+
+_autostart_write_schtasks() {
+  local label="$1"; shift
+  local logfile="$LOG_DIR/${ENV_NAME}.log"
+  # schtasks /TR takes a single command line with no redirection, so the
+  # redirect has to live inside something. A generated .cmd wrapper is that
+  # something, and it also pins the working directory the way the plist's
+  # WorkingDirectory and the unit's WorkingDirectory do.
+  local wrapper="$LOG_DIR/${label}.cmd"
+  if dry; then note "would write $wrapper and register scheduled task $label"; return 0; fi
+  need schtasks
+  mkdir -p "$LOG_DIR"
+
+  local winroot winlog a
+  winroot="$(cygpath -w "$ROOT" 2>/dev/null || echo "$ROOT")"
+  winlog="$(cygpath -w "$logfile" 2>/dev/null || echo "$logfile")"
+
+  {
+    printf '@echo off\r\n'
+    local kv
+    for kv in ${OPS_SERVICE_ENV[@]+"${OPS_SERVICE_ENV[@]}"}; do
+      printf 'set "%s"\r\n' "$kv"
+    done
+    printf 'cd /d "%s"\r\n' "$winroot"
+    printf '"%s"' "$(cygpath -w "$1" 2>/dev/null || echo "$1")"
+    shift
+    for a in "$@"; do printf ' "%s"' "$a"; done
+    printf ' >> "%s" 2>&1\r\n' "$winlog"
+  } > "$wrapper"
+
+  # ONLOGON rather than ONSTART: these are user-scoped services in the fleet,
+  # matching launchd's gui/<uid> domain and systemd's --user.
+  schtasks //Create //TN "$label" //SC ONLOGON //F \
+    //TR "$(cygpath -w "$wrapper" 2>/dev/null || echo "$wrapper")" >/dev/null
+  ok "autostart on — scheduled task $label installed (ONLOGON), logging to $logfile"
+  warn "Windows has no KeepAlive equivalent here: the task starts the process at logon but will not restart it if it exits."
 }
 
 # ------------------------------------------------ generic: backup-files ----
@@ -384,7 +617,7 @@ generic_backup_files() {
   mv "$tmp" "$out"
 
   local sha size commit
-  sha="$(shasum -a 256 "$out" | cut -d' ' -f1)"
+  sha="$(os_sha256 "$out")"
   size="$(wc -c < "$out" | tr -d ' ')"
   commit="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   cat > "$out.meta.json" <<EOF
@@ -440,21 +673,55 @@ generic_autostart() {
           done ;;
         *) err "autostart takes on|off|status"; return 2 ;;
       esac ;;
-    launchd)
-      need launchctl
+    # `service` is the platform-neutral name; `launchd` is the spelling the
+    # manifests were written with when the mini was the only host, and still
+    # means the same thing — keep this process alive across reboots, using
+    # whatever service manager this machine has.
+    service|launchd)
       local label="com.customapplab.$PROJECT.$ENV_NAME"
-      local plist="$HOME/Library/LaunchAgents/$label.plist"
       case "$action" in
-        on)     have "${ENV_NAME}_autostart_install" \
-                  && "${ENV_NAME}_autostart_install" \
-                  || { err "launchd autostart needs ${ENV_NAME}_autostart_install in bindings.sh"; return 3; } ;;
-        off)    [[ -f "$plist" ]] && { run launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
-                  run rm -f "$plist"; ok "autostart off — $label removed"; } || note "no $label installed" ;;
-        status) if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
-                  ok "$label loaded"
-                else
-                  printf '%s not loaded\n' "$label"; return 1
-                fi ;;
+        on)
+          have "${ENV_NAME}_autostart_install" \
+            && "${ENV_NAME}_autostart_install" \
+            || { err "service autostart needs ${ENV_NAME}_autostart_install in bindings.sh"; return 3; } ;;
+        off)
+          case "$OPS_OS" in
+            mac)
+              local plist="$HOME/Library/LaunchAgents/$label.plist"
+              [[ -f "$plist" ]] && { need launchctl
+                run launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+                run rm -f "$plist"; ok "autostart off — $label removed"; } || note "no $label installed" ;;
+            linux)
+              local unit="$HOME/.config/systemd/user/$label.service"
+              [[ -f "$unit" ]] && { need systemctl
+                run systemctl --user disable --now "$label.service" 2>/dev/null || true
+                run rm -f "$unit"; run systemctl --user daemon-reload
+                ok "autostart off — $label removed"; } || note "no $label installed" ;;
+            windows)
+              need schtasks
+              if schtasks //Query //TN "$label" >/dev/null 2>&1; then
+                run schtasks //Delete //TN "$label" //F >/dev/null
+                ok "autostart off — scheduled task $label removed"
+              else note "no $label installed"; fi ;;
+            *) err "autostart is not supported on this platform"; return 3 ;;
+          esac ;;
+        status)
+          case "$OPS_OS" in
+            mac)
+              need launchctl
+              if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then ok "$label loaded"
+              else printf '%s not loaded\n' "$label"; return 1; fi ;;
+            linux)
+              need systemctl
+              if systemctl --user is-enabled "$label.service" >/dev/null 2>&1; then
+                ok "$label enabled ($(systemctl --user is-active "$label.service" 2>/dev/null))"
+              else printf '%s not enabled\n' "$label"; return 1; fi ;;
+            windows)
+              need schtasks
+              if schtasks //Query //TN "$label" >/dev/null 2>&1; then ok "$label registered"
+              else printf '%s not registered\n' "$label"; return 1; fi ;;
+            *) err "autostart is not supported on this platform"; return 3 ;;
+          esac ;;
         *) err "autostart takes on|off|status"; return 2 ;;
       esac ;;
     none) err "this project declares autostart: none for $ENV_NAME"; return 3 ;;
@@ -472,9 +739,20 @@ generic_doctor() {
   soft(){ chk "$1" "${YEL}WARN${NC} $2"; warnings=$((warnings+1)); }
   good(){ chk "$1" "${GRN}ok${NC} $2"; }
 
-  # tools
-  local t
-  for t in ${E_REQUIRES:-}; do
+  chk "platform" "$OPS_OS ($(uname -s 2>/dev/null || echo unknown))"
+  [[ "$OPS_OS" == unknown ]] && soft "platform" "unrecognised; assuming POSIX tools"
+
+  # Required tools. `requires` lists what every platform needs; an optional
+  # `requires_<os>` block adds what only that one does — a manifest that
+  # demands lsof everywhere fails a Windows host for a tool it will never
+  # have and does not need, because os_port_pids uses netstat there.
+  local t reqs="${E_REQUIRES:-}"
+  case "$OPS_OS" in
+    mac)     reqs="$reqs ${E_REQUIRES_MAC:-}" ;;
+    linux)   reqs="$reqs ${E_REQUIRES_LINUX:-}" ;;
+    windows) reqs="$reqs ${E_REQUIRES_WINDOWS:-}" ;;
+  esac
+  for t in $reqs; do
     command -v "$t" >/dev/null 2>&1 && good "tool: $t" "" || bad "tool: $t" "not on PATH"
   done
 
@@ -484,9 +762,12 @@ generic_doctor() {
     [[ "$cfg" == /* ]] || cfg="$CONFIG_DIR/$cfg"
     E_CONFIG="$cfg"
     if [[ -f "$E_CONFIG" ]]; then
-      local mode; mode="$(stat -f '%Lp' "$E_CONFIG" 2>/dev/null || echo '?')"
-      [[ "$mode" == "600" ]] && good "config: $E_CONFIG" "mode $mode" \
-                             || soft "config: $E_CONFIG" "mode $mode, expected 600"
+      local mode; mode="$(os_file_mode "$E_CONFIG")"
+      case "$mode" in
+        600)   good "config: $E_CONFIG" "mode $mode" ;;
+        n/a)   chk  "config: $E_CONFIG" "present (Windows: ACLs, no POSIX mode)" ;;
+        *)     soft "config: $E_CONFIG" "mode $mode, expected 600" ;;
+      esac
     else
       bad "config: $E_CONFIG" "missing"
     fi
@@ -494,9 +775,12 @@ generic_doctor() {
 
   # ops-layer config
   if [[ -f "$CICD_ENV_FILE" ]]; then
-    local m2; m2="$(stat -f '%Lp' "$CICD_ENV_FILE" 2>/dev/null || echo '?')"
-    [[ "$m2" == "600" ]] && good "ops config: $CICD_ENV_FILE" "mode $m2" \
-                         || soft "ops config: $CICD_ENV_FILE" "mode $m2, expected 600"
+    local m2; m2="$(os_file_mode "$CICD_ENV_FILE")"
+    case "$m2" in
+      600)   good "ops config: $CICD_ENV_FILE" "mode $m2" ;;
+      n/a)   chk  "ops config: $CICD_ENV_FILE" "present (Windows: ACLs, no POSIX mode)" ;;
+      *)     soft "ops config: $CICD_ENV_FILE" "mode $m2, expected 600" ;;
+    esac
   else
     soft "ops config: $CICD_ENV_FILE" "not present (optional)"
   fi
@@ -504,7 +788,7 @@ generic_doctor() {
   # ports
   local p
   for p in ${E_PORTS:-}; do
-    if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
+    if os_port_busy "$p"; then
       chk "port $p" "in use (expected if $ENV_NAME is up)"
     else
       good "port $p" "free"
@@ -523,8 +807,12 @@ generic_doctor() {
   done
 
   # disk
-  local avail; avail="$(df -h /opt 2>/dev/null | awk 'NR==2{print $4}')"
-  [[ -n "$avail" ]] && chk "disk free on /opt" "$avail"
+  # /opt is the fleet convention, but a Windows checkout lives on J:\ and
+  # has no /opt at all — report the volume the checkout is actually on there.
+  local dtarget="/opt"
+  [[ -d "$dtarget" ]] || dtarget="$ROOT"
+  local avail; avail="$(df -h "$dtarget" 2>/dev/null | awk 'NR==2{print $4}')"
+  [[ -n "$avail" ]] && chk "disk free on $dtarget" "$avail"
 
   # compose restart policy vs manifest
   if compose_declared && [[ "${E_AUTOSTART:-}" == "docker" ]]; then
