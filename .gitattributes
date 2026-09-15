@@ -1,0 +1,4 @@
+# --- fleet operations standard -----------------------------------------------
+# bash cannot run a CRLF script ("$'\r': command not found"), and a Windows clone
+# with core.autocrlf=true would otherwise check .cicd/ out that way.
+.cicd/** text eol=lf

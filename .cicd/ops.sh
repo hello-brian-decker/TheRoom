@@ -22,13 +22,22 @@
 #      restore-db, autostart, doctor, and compose-based status/logs/restart)
 #   3. exit 3 — "not supported in this project", with the reason
 #
+# Portable bindings use the os_* primitives below instead of raw commands:
+#   os_port_pids / os_port_busy / os_port_report / os_kill_port   (not lsof, xargs kill)
+#   os_bg <log> <cmd...>                                           (not nohup ... & disown)
+#   os_open_url / os_sha256 / os_file_mode / os_host_path / py     (not open, shasum, stat, python3)
+#   write_autostart_service                                        (not launchctl / systemctl / schtasks)
+# Scripts a binding calls inherit OPS_OS, OPS_BASE and the self-contained
+# primitives (os_port_* / os_kill_port / os_proc_name / os_sha256 / os_file_mode /
+# os_host_path) through the environment.
+#
 # Exit codes: 0 ok · 1 failed · 2 usage · 3 unsupported · 4 missing tool
 #             5 unhealthy · 6 refused by a safety guard
 #
 # See: g01-base-infra/docs/fleet-operations.md
 set -euo pipefail
 
-OPS_VERSION="1.1.0"
+OPS_VERSION="1.2.2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -69,6 +78,32 @@ case "$(uname -s 2>/dev/null || echo unknown)" in
   MINGW*|MSYS*|CYGWIN*) OPS_OS=windows ;;
   *)                    OPS_OS=unknown ;;
 esac
+
+# ------------------------------------------------------------ host layout ---
+# The host filesystem contract is <base>/{apps,configs,logs,backups,data}. On
+# the Mac mini <base> is /opt. On a Windows PC the checkouts live in, say,
+# J:/opt/apps — and Git Bash's own /opt is a folder inside the Git install, so a
+# hard-coded /opt/logs would write logs where nobody looks (or fail outright).
+# <base> is therefore derived from where this checkout actually sits: the parent
+# of the `apps` directory holding it. A checkout anywhere else (a worktree, a
+# scratch clone) keeps the classic /opt. OPS_BASE in the environment overrides.
+if [[ -z "${OPS_BASE:-}" ]]; then
+  _apps_dir="$(dirname "$ROOT")"
+  if [[ "$(basename "$_apps_dir")" == apps ]]; then OPS_BASE="$(dirname "$_apps_dir")"; else OPS_BASE=/opt; fi
+  unset _apps_dir
+fi
+# Exported for the scripts a binding calls (scripts/up.sh and friends), which
+# spell host paths as "${OPS_BASE:-/opt}/logs/..." and branch on "$OPS_OS".
+# OPS_OS, not OS: Windows already sets OS=Windows_NT and tools read it.
+export OPS_OS OPS_BASE
+
+# os_host_path <path> — a path a manifest wrote against /opt, placed on this host.
+os_host_path() {
+  case "$1" in
+    /opt/*) printf '%s/%s' "$OPS_BASE" "${1#/opt/}" ;;
+    *)      printf '%s' "$1" ;;
+  esac
+}
 
 # os_sha256 <file> — the digest alone, no filename, no leading spaces.
 os_sha256() {
@@ -113,7 +148,9 @@ _os_port_pids() {
   local port="$1"
   case "$OPS_OS" in
     windows)
-      netstat -ano 2>/dev/null | awk -v p=":$port" \
+      # netstat prints CRLF; without the tr the pid comes back as "4242\r" and
+      # taskkill is handed a pid that does not exist.
+      netstat -ano 2>/dev/null | tr -d '\r' | awk -v p=":$port" \
         '$1 == "TCP" && $4 == "LISTENING" && substr($2, length($2)-length(p)+1) == p {print $5}' \
         | sort -u ;;
     *)
@@ -129,6 +166,67 @@ _os_port_pids() {
 
 # os_port_busy <port> — true when something is listening.
 os_port_busy() { [[ -n "$(os_port_pids "$1")" ]]; }
+
+# os_proc_name <pid> — the command behind a pid, for humans. Best effort.
+os_proc_name() {
+  case "$OPS_OS" in
+    windows) tasklist //FI "PID eq $1" //FO CSV //NH 2>/dev/null | head -1 | cut -d, -f1 | tr -d '"\r' ;;
+    # The program's basename, then its arguments: a framework Python's full path
+    # alone is over 100 characters and would push the part that says what it is
+    # off the end.
+    *)       ps -o command= -p "$1" 2>/dev/null | awk '{n=split($1,a,"/"); $1=a[n]; print}' | cut -c1-160 ;;
+  esac
+}
+
+# os_port_report <port> — "pid  command" per listener; exits 1 when nothing
+# listens, so a status binding reads:
+#   os_port_report "$PORT" || echo "not listening on :$PORT"
+os_port_report() {
+  local pids pid
+  pids="$(os_port_pids "$1")"
+  [[ -n "$pids" ]] || return 1
+  for pid in $pids; do printf '%s  %s\n' "$pid" "$(os_proc_name "$pid")"; done
+}
+
+# os_bg <logfile> <cmd...> — start a long-running process detached from this
+# shell, output appended to <logfile>, stdin closed. Prints the pid.
+#
+# The portable replacement for `nohup cmd >>log 2>&1 & disown`. Two details the
+# hand-written form usually misses: stdin must be closed, or a caller that
+# captures our output (Ansible, the sync node, a CI step) waits on the inherited
+# pipe until the service exits; and nohup is not guaranteed on Git Bash or slim
+# images, where a disowned background job is the honest fallback.
+os_bg() {
+  local log="$1"; shift
+  if dry; then note "would start in the background: $* (log: $log)"; return 0; fi
+  mkdir -p "$(dirname "$log")"
+  # nohup and setsid exec a program; they cannot run a shell function. `py` is
+  # the one every binding reaches for, so resolve it to the interpreter itself,
+  # and run any other function in a detached subshell.
+  if [[ "$1" == py ]]; then shift; set -- "${PY[@]}" "$@"; fi
+  if declare -F "$1" >/dev/null 2>&1; then
+    ( "$@" ) >>"$log" 2>&1 </dev/null &
+  elif command -v setsid >/dev/null 2>&1 && [[ "$OPS_OS" == linux ]]; then
+    setsid "$@" >>"$log" 2>&1 </dev/null &
+  elif command -v nohup >/dev/null 2>&1; then
+    nohup "$@" >>"$log" 2>&1 </dev/null &
+  else
+    "$@" >>"$log" 2>&1 </dev/null &
+  fi
+  local pid=$!
+  disown "$pid" 2>/dev/null || true
+  printf '%s\n' "$pid"
+}
+
+# os_open_url <url> — open a browser, where there is someone to look at it.
+os_open_url() {
+  case "$OPS_OS" in
+    mac)     run open "$1" ;;
+    linux)   if command -v xdg-open >/dev/null 2>&1; then run xdg-open "$1"; else note "open $1"; fi ;;
+    windows) run cmd //c start "" "$1" ;;
+    *)       note "open $1" ;;
+  esac
+}
 
 # json_str <text> — one JSON string, quoted and escaped. Paths and messages
 # reach --json output verbatim, and a Windows path alone (C:\Users\...) is
@@ -208,6 +306,13 @@ for a in "$@"; do
 done
 set -- ${ARGS[@]+"${ARGS[@]}"}
 
+# Scripts a binding calls (scripts/up.sh and friends) are child processes and
+# would otherwise re-implement these badly. The self-contained primitives are
+# exported to them; os_bg and os_open_url are not, because they lean on
+# --dry-run state that only exists inside this process.
+export -f _os_port_pids os_port_pids os_port_busy os_kill_port os_proc_name os_port_report \
+  os_sha256 os_file_mode os_host_path
+
 run() {  # run <cmd...> — honours --dry-run
   if [[ "$DRY" == 1 ]]; then note "would run: $*"; return 0; fi
   "$@"
@@ -235,21 +340,41 @@ confirm() {  # confirm <prompt> — required for destructive verbs
 }
 
 # --------------------------------------------------------------- manifest ---
-PY=""
-for c in python3 /usr/local/bin/python3 /opt/homebrew/bin/python3 /usr/bin/python3; do
-  command -v "$c" >/dev/null 2>&1 && { PY="$c"; break; }
+# Python 3.8+: `python3` on macOS and Linux; `python` or the `py -3` launcher on
+# Windows, where `python3` is frequently a Microsoft Store stub that prints an
+# advert and exits 9009. So each candidate is RUN, not merely found on PATH.
+PY=()
+_py_ok() { "$@" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; }
+for _c in "python3" "python" "py -3" "/usr/local/bin/python3" "/opt/homebrew/bin/python3" "/usr/bin/python3"; do
+  read -r -a _cand <<<"$_c"
+  if command -v "${_cand[0]}" >/dev/null 2>&1 && _py_ok "${_cand[@]}"; then PY=("${_cand[@]}"); break; fi
 done
-[[ -n "$PY" ]] || die "python3 is required to read .cicd/project.yml." 4
+unset _c _cand
+[[ ${#PY[@]} -gt 0 ]] || die "Python 3.8+ is required to read .cicd/project.yml (tried python3, python, py -3)." 4
+# py <args...> — the interpreter found above, for bindings: py scripts/start_app.py
+py() { "${PY[@]}" "$@"; }
 [[ -f "$MANIFEST" ]] || die "missing $MANIFEST — this repo is not on the fleet ops standard yet."
 
+# A Windows clone with core.autocrlf=true checks these out with CRLF endings, and
+# bash then fails with "$'\r': command not found" somewhere deep inside a verb.
+# Name the real problem instead. (ops.sh itself cannot guard against this — it
+# would already have failed to parse — which is why every repo carries a
+# .gitattributes forcing LF for .cicd/.)
+for _f in "$CICD/bindings.sh" "$MANIFEST"; do
+  if [[ -f "$_f" ]] && grep -q $'\r' "$_f"; then
+    die "$_f has Windows (CRLF) line endings, which bash cannot run. Fix once: sed -i 's/\r$//' \"$_f\" — and make sure the repo has a .gitattributes with: .cicd/** text eol=lf" 1
+  fi
+done
+unset _f
+
 ENV_NAME="${1:-}"; VERB="${2:-}"
-[[ -n "$ENV_NAME" && -n "$VERB" ]] || { eval "$("$PY" "$CICD/manifest.py" "$MANIFEST" 2>/dev/null || true)"; usage; }
+[[ -n "$ENV_NAME" && -n "$VERB" ]] || { eval "$(py "$CICD/manifest.py" "$MANIFEST" 2>/dev/null || true)"; usage; }
 shift 2 || true
 
 # Capture first, then eval: `eval "$(cmd)"` would swallow cmd's exit status and
 # carry on with an empty environment, turning a bad env name into a confusing
 # "P_PROJECT is missing" further down.
-MF_OUT="$("$PY" "$CICD/manifest.py" "$MANIFEST" "$ENV_NAME")" || exit 1
+MF_OUT="$(py "$CICD/manifest.py" "$MANIFEST" "$ENV_NAME" | tr -d '\r')" || exit 1
 eval "$MF_OUT"
 
 PROJECT="${P_PROJECT:?manifest is missing 'project'}"
@@ -263,7 +388,7 @@ SLUG="${P_SLUG:-$PROJECT}"
 #
 # Per-environment APPLICATION config is a separate file in the same directory:
 # /opt/configs/<project>/<env>.env, named by the manifest's `config:` key.
-CONFIG_ROOT="${CONFIG_ROOT:-/opt/configs}"
+CONFIG_ROOT="${CONFIG_ROOT:-$OPS_BASE/configs}"
 CONFIG_DIR="$CONFIG_ROOT/$PROJECT"
 CICD_ENV_FILE="$CONFIG_DIR/.env.cicd"
 if [[ -f "$CICD_ENV_FILE" ]]; then
@@ -274,8 +399,17 @@ if [[ -f "$CICD_ENV_FILE" ]]; then
 fi
 export CONFIG_ROOT CONFIG_DIR CICD_ENV_FILE PROJECT SLUG ENV_NAME
 
-LOG_DIR="${E_LOG_DIR:-/opt/logs/$PROJECT/$ENV_NAME}"
-BACKUP_DIR="${BACKUP_DIR:-/opt/backups/$PROJECT/database/$ENV_NAME}"
+# Manifests write host paths against /opt; os_host_path places them on this host.
+[[ -n "${E_LOG_DIR:-}" ]] && E_LOG_DIR="$(os_host_path "$E_LOG_DIR")"
+[[ "${E_CONFIG:-}" == /* ]] && E_CONFIG="$(os_host_path "$E_CONFIG")"
+[[ -n "${E_DATABASE_DATA_DIR:-}" ]] && E_DATABASE_DATA_DIR="$(os_host_path "$E_DATABASE_DATA_DIR")"
+# files.paths: relative entries are inside the checkout; absolute /opt ones move with the host base.
+if [[ -n "${E_FILES_PATHS:-}" ]]; then
+  _fp=""; for _p in $E_FILES_PATHS; do _fp="$_fp $(os_host_path "$_p")"; done
+  E_FILES_PATHS="${_fp# }"; unset _fp _p
+fi
+LOG_DIR="${E_LOG_DIR:-$OPS_BASE/logs/$PROJECT/$ENV_NAME}"
+BACKUP_DIR="${BACKUP_DIR:-$OPS_BASE/backups/$PROJECT/database/$ENV_NAME}"
 
 # ------------------------------------------------------- compose defaults ---
 compose_declared() { [[ -n "${E_COMPOSE_FILES:-}" ]]; }
@@ -410,7 +544,7 @@ generic_restore_db() {
   local src
   case "$from" in
     latest) src="$(ls -1t "$BACKUP_DIR"/*.dump 2>/dev/null | head -1 || true)" ;;
-    prod)   src="$(ls -1t /opt/data/g01-base-infra/database/latest/"$SLUG".dump 2>/dev/null | head -1 || true)" ;;
+    prod)   src="$(ls -1t "$OPS_BASE"/data/g01-base-infra/database/latest/"$SLUG".dump 2>/dev/null | head -1 || true)" ;;
     *)      src="$from" ;;
   esac
   [[ -n "$src" && -f "$src" ]] || { err "no dump found for --from $from (looked in $BACKUP_DIR)"; return 1; }
@@ -608,7 +742,7 @@ _autostart_write_schtasks() {
 generic_backup_files() {
   local paths="${E_FILES_PATHS:-}"
   [[ -n "$paths" ]] || { err "no 'files.paths' declared for $ENV_NAME — nothing to back up"; return 3; }
-  local dir="${FILES_BACKUP_DIR:-/opt/backups/$PROJECT/files/$ENV_NAME}"
+  local dir="${FILES_BACKUP_DIR:-$OPS_BASE/backups/$PROJECT/files/$ENV_NAME}"
   mkdir -p "$dir"
 
   local present=() p
@@ -762,6 +896,8 @@ generic_doctor() {
   good(){ _rec "$1" ok   "$2"; _p "$1" "${GRN}ok${NC} $2"; }
 
   chk "platform" "$OPS_OS ($(uname -s 2>/dev/null || echo unknown))"
+  chk "host base" "$OPS_BASE  (configs, logs, backups live under here)"
+  chk "python" "${PY[*]} ($(py -c 'import platform; print(platform.python_version())' 2>/dev/null | tr -d '\r'))"
   [[ "$OPS_OS" == unknown ]] && soft "platform" "unrecognised; assuming POSIX tools"
 
   # Required tools. `requires` lists what every platform needs; an optional

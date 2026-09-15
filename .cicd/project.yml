@@ -16,7 +16,7 @@ environments:
     url: http://localhost:7878
     health_mode: tcp
     ports: [7878]
-    requires: node lsof
+    requires: node
     log_dir: /opt/logs/TheRoom/staging
     autostart: none
 
