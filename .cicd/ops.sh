@@ -130,6 +130,19 @@ _os_port_pids() {
 # os_port_busy <port> — true when something is listening.
 os_port_busy() { [[ -n "$(os_port_pids "$1")" ]]; }
 
+# json_str <text> — one JSON string, quoted and escaped. Paths and messages
+# reach --json output verbatim, and a Windows path alone (C:\Users\...) is
+# enough to produce invalid JSON without this.
+json_str() {
+  local s=${1-}
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  printf '"%s"' "$s"
+}
+
 # os_kill_port <port> [force] — stop whatever holds a TCP port.
 #
 # The portable replacement for the `lsof … -t | xargs kill` that nine repos'
@@ -732,12 +745,21 @@ generic_autostart() {
 # ---------------------------------------------------- generic: doctor ------
 generic_doctor() {
   local problems=0 warnings=0
-  printf '%s (%s)\n' "$PROJECT" "$ENV_NAME"
+  # --json emits the same checks the text form prints, from the same recording,
+  # so the two can never disagree: every helper below records once and prints
+  # only when we are not in JSON mode. Arrays are indexed through an explicit
+  # counter because `${!arr[@]}` on an empty array is an error under bash 3.2,
+  # which is still /bin/bash on macOS.
+  local D_N=0
+  local -a D_NAME=() D_STATE=() D_DETAIL=()
+  [[ "$JSON" == 1 ]] || printf '%s (%s)\n' "$PROJECT" "$ENV_NAME"
 
-  chk() { printf '  %-46s %s\n' "$1" "$2"; }
-  bad() { chk "$1" "${RED}FAIL${NC} $2"; problems=$((problems+1)); }
-  soft(){ chk "$1" "${YEL}WARN${NC} $2"; warnings=$((warnings+1)); }
-  good(){ chk "$1" "${GRN}ok${NC} $2"; }
+  _p()   { [[ "$JSON" == 1 ]] || printf '  %-46s %s\n' "$1" "$2"; }
+  _rec() { D_NAME[$D_N]="$1"; D_STATE[$D_N]="$2"; D_DETAIL[$D_N]="$3"; D_N=$((D_N+1)); }
+  chk() { _rec "$1" info "$2"; _p "$1" "$2"; }
+  bad() { _rec "$1" fail "$2"; _p "$1" "${RED}FAIL${NC} $2"; problems=$((problems+1)); }
+  soft(){ _rec "$1" warn "$2"; _p "$1" "${YEL}WARN${NC} $2"; warnings=$((warnings+1)); }
+  good(){ _rec "$1" ok   "$2"; _p "$1" "${GRN}ok${NC} $2"; }
 
   chk "platform" "$OPS_OS ($(uname -s 2>/dev/null || echo unknown))"
   [[ "$OPS_OS" == unknown ]] && soft "platform" "unrecognised; assuming POSIX tools"
@@ -824,6 +846,26 @@ generic_doctor() {
     done
     [[ "$found" == 1 ]] && good "compose restart policy" "declared" \
                         || soft "compose restart policy" "manifest says autostart: docker but no service has always/unless-stopped/on-failure"
+  fi
+
+  if [[ "$JSON" == 1 ]]; then
+    # One object per check, in the order they ran. `state` is the machine-
+    # readable verdict (ok | warn | fail | info); `detail` is the same string a
+    # human would have read. A consumer colours on state and shows detail.
+    local i
+    printf '{"project":%s,"env":%s,"platform":%s,"ops_version":%s,' \
+      "$(json_str "$PROJECT")" "$(json_str "$ENV_NAME")" \
+      "$(json_str "$OPS_OS")" "$(json_str "$OPS_VERSION")"
+    printf '"problems":%d,"warnings":%d,"healthy":%s,"checks":[' \
+      "$problems" "$warnings" "$([[ "$problems" -eq 0 ]] && echo true || echo false)"
+    for ((i = 0; i < D_N; i++)); do
+      [[ "$i" -eq 0 ]] || printf ','
+      printf '{"name":%s,"state":"%s","detail":%s}' \
+        "$(json_str "${D_NAME[$i]}")" "${D_STATE[$i]}" "$(json_str "${D_DETAIL[$i]}")"
+    done
+    printf ']}\n'
+    [[ "$problems" -gt 0 ]] && return 1
+    return 0
   fi
 
   printf '\n'
